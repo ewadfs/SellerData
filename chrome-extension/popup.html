@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SellerData Messaging Assistant</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <header class="popup-header">
+      <h1>SellerData</h1>
+      <span class="subtitle">Messaging Assistant</span>
+    </header>
+
+    <!-- Settings Section -->
+    <section id="settings-section" class="section hidden">
+      <h2>API Settings</h2>
+      <div class="form-group">
+        <label for="api-key-input">OpenAI API Key</label>
+        <input type="password" id="api-key-input" placeholder="sk-..." />
+      </div>
+      <div class="form-group">
+        <label for="seller-name-input">Your Seller / Brand Name</label>
+        <input type="text" id="seller-name-input" placeholder="e.g. Acme Store" />
+      </div>
+      <div class="form-group">
+        <label for="tone-select">Response Tone</label>
+        <select id="tone-select">
+          <option value="professional">Professional</option>
+          <option value="friendly">Friendly</option>
+          <option value="empathetic">Empathetic</option>
+          <option value="concise">Concise</option>
+        </select>
+      </div>
+      <div class="btn-row">
+        <button id="save-settings-btn" class="btn btn-primary">Save Settings</button>
+        <button id="back-btn" class="btn btn-secondary">Back</button>
+      </div>
+      <p id="settings-status" class="status-msg"></p>
+    </section>
+
+    <!-- Main Section -->
+    <section id="main-section" class="section">
+      <div class="status-bar">
+        <span id="page-status" class="status-indicator">Not on Seller Central</span>
+        <button id="settings-btn" class="icon-btn" title="Settings">&#9881;</button>
+      </div>
+
+      <!-- Customer Message Input -->
+      <div class="form-group">
+        <label for="customer-message">Customer Message</label>
+        <textarea id="customer-message" rows="5" placeholder="Paste the customer's message here, or it will be auto-detected on Seller Central messaging pages..."></textarea>
+      </div>
+
+      <!-- AI Response Generator -->
+      <div class="form-group">
+        <label>AI-Generated Response</label>
+        <div class="ai-actions">
+          <button id="generate-btn" class="btn btn-primary btn-full">Generate AI Response</button>
+        </div>
+        <textarea id="ai-response" rows="6" placeholder="AI-generated response will appear here..."></textarea>
+        <div class="btn-row">
+          <button id="copy-btn" class="btn btn-secondary" disabled>Copy</button>
+          <button id="insert-btn" class="btn btn-secondary" disabled>Insert into Reply</button>
+          <button id="regenerate-btn" class="btn btn-outline" disabled>Regenerate</button>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="quick-actions">
+        <h3>Quick Actions</h3>
+        <div class="action-grid">
+          <button id="refund-btn" class="btn btn-action btn-refund">
+            <span class="action-icon">&#8634;</span>
+            <span>Process Refund</span>
+          </button>
+          <button id="replacement-btn" class="btn btn-action btn-replacement">
+            <span class="action-icon">&#9998;</span>
+            <span>Send Replacement</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Response Templates -->
+      <div class="templates-section">
+        <h3>Quick Templates</h3>
+        <div class="template-list">
+          <button class="template-btn" data-template="apology">Apology</button>
+          <button class="template-btn" data-template="shipping_delay">Shipping Delay</button>
+          <button class="template-btn" data-template="return_instructions">Return Instructions</button>
+          <button class="template-btn" data-template="thank_you">Thank You</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Refund Modal -->
+    <section id="refund-section" class="section hidden">
+      <h2>Process Refund</h2>
+      <div class="form-group">
+        <label for="refund-order-id">Order ID</label>
+        <input type="text" id="refund-order-id" placeholder="e.g. 114-1234567-1234567" />
+      </div>
+      <div class="form-group">
+        <label for="refund-amount">Refund Amount ($)</label>
+        <input type="number" id="refund-amount" step="0.01" placeholder="0.00" />
+      </div>
+      <div class="form-group">
+        <label for="refund-reason">Reason</label>
+        <select id="refund-reason">
+          <option value="customer_request">Customer Request</option>
+          <option value="damaged">Item Damaged</option>
+          <option value="wrong_item">Wrong Item Sent</option>
+          <option value="not_received">Not Received</option>
+          <option value="defective">Defective Product</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="refund-notify" checked />
+          Send confirmation message to customer
+        </label>
+      </div>
+      <div class="btn-row">
+        <button id="process-refund-btn" class="btn btn-primary">Open Refund Page</button>
+        <button id="refund-generate-msg-btn" class="btn btn-secondary">Generate Refund Message</button>
+        <button class="btn btn-outline back-to-main">Cancel</button>
+      </div>
+    </section>
+
+    <!-- Replacement Modal -->
+    <section id="replacement-section" class="section hidden">
+      <h2>Send Replacement</h2>
+      <div class="form-group">
+        <label for="replacement-order-id">Order ID</label>
+        <input type="text" id="replacement-order-id" placeholder="e.g. 114-1234567-1234567" />
+      </div>
+      <div class="form-group">
+        <label for="replacement-asin">Product ASIN</label>
+        <input type="text" id="replacement-asin" placeholder="e.g. B0XXXXXXXX" />
+      </div>
+      <div class="form-group">
+        <label for="replacement-reason">Reason</label>
+        <select id="replacement-reason">
+          <option value="damaged">Item Damaged in Transit</option>
+          <option value="defective">Defective Product</option>
+          <option value="wrong_item">Wrong Item Sent</option>
+          <option value="missing_parts">Missing Parts</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="replacement-notify" checked />
+          Send confirmation message to customer
+        </label>
+      </div>
+      <div class="btn-row">
+        <button id="process-replacement-btn" class="btn btn-primary">Open Replacement Page</button>
+        <button id="replacement-generate-msg-btn" class="btn btn-secondary">Generate Message</button>
+        <button class="btn btn-outline back-to-main">Cancel</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="lib/utils.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

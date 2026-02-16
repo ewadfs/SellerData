@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head><title>Generate Icons</title></head>
+<body>
+<!--
+  To generate the extension icons, create PNG files at 16x16, 48x48, and 128x128 pixels.
+  You can use this simple canvas-based generator by opening this file in a browser.
+-->
+<canvas id="c16" width="16" height="16"></canvas>
+<canvas id="c48" width="48" height="48"></canvas>
+<canvas id="c128" width="128" height="128"></canvas>
+<script>
+function drawIcon(canvas) {
+  const ctx = canvas.getContext('2d');
+  const s = canvas.width;
+
+  // Background
+  ctx.fillStyle = '#232f3e';
+  ctx.beginPath();
+  ctx.arc(s/2, s/2, s/2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // "SD" text
+  ctx.fillStyle = '#ff9900';
+  ctx.font = `bold ${s * 0.4}px Arial`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('SD', s/2, s/2);
+}
+
+['c16', 'c48', 'c128'].forEach(id => {
+  const canvas = document.getElementById(id);
+  drawIcon(canvas);
+
+  // Download link
+  const link = document.createElement('a');
+  link.download = `icon${canvas.width}.png`;
+  link.href = canvas.toDataURL();
+  link.textContent = `Download ${canvas.width}x${canvas.width}`;
+  document.body.appendChild(link);
+  document.body.appendChild(document.createElement('br'));
+});
+</script>
+</body>
+</html>

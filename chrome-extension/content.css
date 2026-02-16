@@ -1,0 +1,72 @@
+/* SellerData Toolbar - injected into Amazon Seller Central messaging pages */
+
+#sellerdata-toolbar {
+  margin: 8px 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  z-index: 99999;
+}
+
+.sellerdata-toolbar-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #232f3e, #37475a);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.sellerdata-logo {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ff9900;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.sellerdata-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.sellerdata-btn-ai {
+  background: #ff9900;
+  color: #fff;
+}
+
+.sellerdata-btn-ai:hover {
+  background: #e68a00;
+}
+
+.sellerdata-btn-refund {
+  background: #fbbf24;
+  color: #92400e;
+}
+
+.sellerdata-btn-refund:hover {
+  background: #f59e0b;
+}
+
+.sellerdata-btn-replace {
+  background: #60a5fa;
+  color: #1e3a5f;
+}
+
+.sellerdata-btn-replace:hover {
+  background: #3b82f6;
+  color: #fff;
+}
+
+.sellerdata-status {
+  font-size: 11px;
+  color: #d1d5db;
+  margin-left: auto;
+  white-space: nowrap;
+}
