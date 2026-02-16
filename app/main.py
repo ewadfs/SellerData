@@ -1,10 +1,15 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
 from app.config import get_settings
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 @asynccontextmanager
@@ -29,6 +34,14 @@ def create_app() -> FastAPI:
     )
 
     application.include_router(api_router, prefix=settings.API_V1_PREFIX)
+
+    # Serve static files (CSS, JS, images)
+    application.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+    # Serve dashboard at root
+    @application.get("/", include_in_schema=False)
+    async def root():
+        return FileResponse(str(STATIC_DIR / "index.html"))
 
     return application
 

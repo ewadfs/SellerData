@@ -1,0 +1,1381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SellerData - Amazon Data Repository</title>
+<style>
+  :root {
+    --primary: #232f3e;
+    --accent: #ff9900;
+    --accent-hover: #e88b00;
+    --bg: #f5f7fa;
+    --card: #ffffff;
+    --text: #1a1a2e;
+    --text-muted: #6b7280;
+    --border: #e5e7eb;
+    --success: #10b981;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --info: #3b82f6;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* Top Nav */
+  .topbar {
+    background: var(--primary);
+    color: white;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  .topbar h1 {
+    font-size: 20px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .topbar h1 span { color: var(--accent); }
+  .topbar .version {
+    margin-left: 12px;
+    font-size: 11px;
+    background: rgba(255,255,255,0.15);
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+
+  /* Layout */
+  .layout {
+    display: flex;
+    min-height: calc(100vh - 56px);
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: 220px;
+    background: white;
+    border-right: 1px solid var(--border);
+    padding: 16px 0;
+    flex-shrink: 0;
+  }
+  .sidebar .nav-section {
+    padding: 8px 16px 4px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+  .sidebar a {
+    display: block;
+    padding: 8px 16px 8px 20px;
+    color: var(--text);
+    text-decoration: none;
+    font-size: 13px;
+    border-left: 3px solid transparent;
+    transition: all 0.15s;
+  }
+  .sidebar a:hover { background: var(--bg); }
+  .sidebar a.active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    background: #fff8ef;
+    font-weight: 600;
+  }
+
+  /* Main Content */
+  .main {
+    flex: 1;
+    padding: 24px;
+    max-width: 1200px;
+  }
+
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+  .page-header h2 { font-size: 22px; font-weight: 700; }
+
+  /* Cards */
+  .card {
+    background: var(--card);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .card h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Stat Grid */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .stat-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .stat-card .label {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .stat-card .value {
+    font-size: 28px;
+    font-weight: 700;
+    margin-top: 4px;
+  }
+  .stat-card .sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  thead th {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 2px solid var(--border);
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  tbody tr:hover { background: #fafbfc; }
+
+  /* Badges */
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-success { background: #d1fae5; color: #065f46; }
+  .badge-warning { background: #fef3c7; color: #92400e; }
+  .badge-danger { background: #fee2e2; color: #991b1b; }
+  .badge-info { background: #dbeafe; color: #1e40af; }
+  .badge-muted { background: #f3f4f6; color: #6b7280; }
+
+  /* Buttons */
+  .btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: white;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+  .btn:hover { background: var(--bg); }
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  .btn-danger { background: var(--danger); color: white; border-color: var(--danger); }
+
+  /* Forms */
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .form-group label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .form-group input, .form-group select, .form-group textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(255,153,0,0.1);
+  }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  .modal h3 {
+    font-size: 18px;
+    margin-bottom: 16px;
+    font-weight: 700;
+  }
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 16px;
+  }
+
+  /* Toast */
+  .toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 300;
+  }
+  .toast {
+    padding: 12px 20px;
+    border-radius: 8px;
+    color: white;
+    font-size: 13px;
+    margin-top: 8px;
+    animation: slideIn 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+  .toast-success { background: var(--success); }
+  .toast-error { background: var(--danger); }
+  @keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  /* Section visibility */
+  .section { display: none; }
+  .section.active { display: block; }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-muted);
+  }
+  .empty-state p { margin-top: 8px; font-size: 14px; }
+
+  /* AB Test Result */
+  .result-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .result-box {
+    padding: 16px;
+    border-radius: 8px;
+    background: var(--bg);
+  }
+  .result-box .label { font-size: 12px; color: var(--text-muted); }
+  .result-box .val { font-size: 20px; font-weight: 700; margin-top: 4px; }
+
+  .loading { text-align: center; padding: 20px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Seller<span>Data</span></h1>
+  <span class="version">v0.1.0</span>
+</div>
+
+<div class="layout">
+  <nav class="sidebar">
+    <div class="nav-section">Overview</div>
+    <a href="#" data-section="dashboard" class="active">Dashboard</a>
+
+    <div class="nav-section">Data</div>
+    <a href="#" data-section="marketplaces">Marketplaces</a>
+    <a href="#" data-section="sellers">Sellers</a>
+    <a href="#" data-section="products">Products</a>
+    <a href="#" data-section="orders">Orders</a>
+
+    <div class="nav-section">Analytics</div>
+    <a href="#" data-section="business-reports">Business Reports</a>
+    <a href="#" data-section="inventory">Inventory</a>
+    <a href="#" data-section="advertising">Advertising</a>
+    <a href="#" data-section="keywords">Keywords</a>
+
+    <div class="nav-section">Testing</div>
+    <a href="#" data-section="ab-tests">A/B Tests</a>
+  </nav>
+
+  <main class="main">
+
+    <!-- DASHBOARD -->
+    <div id="sec-dashboard" class="section active">
+      <div class="page-header"><h2>Dashboard</h2></div>
+      <div class="stat-grid" id="dashboard-stats"></div>
+      <div class="card">
+        <h3>Recent A/B Tests</h3>
+        <div id="dashboard-recent-tests"><p class="loading">Loading...</p></div>
+      </div>
+    </div>
+
+    <!-- MARKETPLACES -->
+    <div id="sec-marketplaces" class="section">
+      <div class="page-header"><h2>Marketplaces</h2></div>
+      <div class="card">
+        <div id="marketplaces-table"><p class="loading">Loading...</p></div>
+      </div>
+    </div>
+
+    <!-- SELLERS -->
+    <div id="sec-sellers" class="section">
+      <div class="page-header">
+        <h2>Seller Accounts</h2>
+        <button class="btn btn-primary" onclick="openModal('seller-modal')">+ New Seller</button>
+      </div>
+      <div class="card">
+        <div id="sellers-table"><p class="loading">Loading...</p></div>
+      </div>
+    </div>
+
+    <!-- PRODUCTS -->
+    <div id="sec-products" class="section">
+      <div class="page-header">
+        <h2>Products</h2>
+        <button class="btn btn-primary" onclick="openCreateProductModal()">+ New Product</button>
+      </div>
+      <div class="card">
+        <div id="products-table"><p class="loading">Loading...</p></div>
+      </div>
+    </div>
+
+    <!-- ORDERS -->
+    <div id="sec-orders" class="section">
+      <div class="page-header"><h2>Orders</h2></div>
+      <div class="card">
+        <div id="orders-table"><p class="loading">Loading...</p></div>
+      </div>
+    </div>
+
+    <!-- BUSINESS REPORTS -->
+    <div id="sec-business-reports" class="section">
+      <div class="page-header">
+        <h2>Business Reports</h2>
+        <button class="btn btn-primary" onclick="openModal('report-modal')">+ Add Report</button>
+      </div>
+      <div class="card">
+        <div id="reports-table"><p class="loading">Loading...</p></div>
+      </div>
+    </div>
+
+    <!-- INVENTORY -->
+    <div id="sec-inventory" class="section">
+      <div class="page-header"><h2>Inventory</h2></div>
+      <div class="card">
+        <h3>FBA Inventory</h3>
+        <div id="inventory-table"><p class="loading">Loading...</p></div>
+      </div>
+    </div>
+
+    <!-- ADVERTISING -->
+    <div id="sec-advertising" class="section">
+      <div class="page-header"><h2>Advertising</h2></div>
+      <div class="card">
+        <h3>Campaigns</h3>
+        <div id="campaigns-table"><p class="loading">Loading...</p></div>
+      </div>
+    </div>
+
+    <!-- KEYWORDS -->
+    <div id="sec-keywords" class="section">
+      <div class="page-header"><h2>Keyword Rankings</h2></div>
+      <div class="card">
+        <div id="keywords-table"><p class="loading">Loading...</p></div>
+      </div>
+    </div>
+
+    <!-- A/B TESTS -->
+    <div id="sec-ab-tests" class="section">
+      <div class="page-header">
+        <h2>A/B Tests</h2>
+        <button class="btn btn-primary" onclick="openCreateTestModal()">+ New Test</button>
+      </div>
+      <div class="card">
+        <div id="ab-tests-table"><p class="loading">Loading...</p></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- CREATE SELLER MODAL -->
+<div class="modal-overlay" id="seller-modal">
+  <div class="modal">
+    <h3>Create Seller Account</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Seller Name *</label>
+        <input type="text" id="seller-name" placeholder="e.g. My Store">
+      </div>
+      <div class="form-group">
+        <label>Company Name</label>
+        <input type="text" id="seller-company" placeholder="e.g. My Company LLC">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('seller-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="createSeller()">Create Seller</button>
+    </div>
+  </div>
+</div>
+
+<!-- CREATE PRODUCT MODAL -->
+<div class="modal-overlay" id="product-modal">
+  <div class="modal">
+    <h3>Create Product</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Seller *</label>
+        <select id="prod-seller"></select>
+      </div>
+      <div class="form-group">
+        <label>Marketplace *</label>
+        <select id="prod-marketplace"></select>
+      </div>
+      <div class="form-group">
+        <label>ASIN *</label>
+        <input type="text" id="prod-asin" placeholder="B0EXAMPLE01">
+      </div>
+      <div class="form-group">
+        <label>SKU</label>
+        <input type="text" id="prod-sku" placeholder="MY-SKU-001">
+      </div>
+      <div class="form-group">
+        <label>Title *</label>
+        <input type="text" id="prod-title" placeholder="Product title">
+      </div>
+      <div class="form-group">
+        <label>Price</label>
+        <input type="number" id="prod-price" step="0.01" placeholder="29.99">
+      </div>
+      <div class="form-group">
+        <label>Currency</label>
+        <select id="prod-currency">
+          <option value="USD">USD</option>
+          <option value="CAD">CAD</option>
+          <option value="GBP">GBP</option>
+          <option value="EUR">EUR</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('product-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="createProduct()">Create Product</button>
+    </div>
+  </div>
+</div>
+
+<!-- CREATE AB TEST MODAL -->
+<div class="modal-overlay" id="ab-test-modal">
+  <div class="modal">
+    <h3>Create A/B Test</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Seller *</label>
+        <select id="test-seller" onchange="loadTestProducts()"></select>
+      </div>
+      <div class="form-group">
+        <label>Product *</label>
+        <select id="test-product"></select>
+      </div>
+      <div class="form-group">
+        <label>Test Name *</label>
+        <input type="text" id="test-name" placeholder="e.g. Main Image Test">
+      </div>
+      <div class="form-group">
+        <label>Change Type *</label>
+        <select id="test-change-type">
+          <option value="main_image">Main Image</option>
+          <option value="title">Title</option>
+          <option value="bullet_points">Bullet Points</option>
+          <option value="description">Description</option>
+          <option value="a_plus_content">A+ Content</option>
+          <option value="price">Price</option>
+          <option value="images">Images</option>
+          <option value="backend_keywords">Backend Keywords</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Hypothesis</label>
+        <input type="text" id="test-hypothesis" placeholder="What do you expect to happen?">
+      </div>
+      <div class="form-group">
+        <label>Primary Metric *</label>
+        <select id="test-primary-metric">
+          <option value="unit_session_percentage">Conversion Rate</option>
+          <option value="sessions">Sessions</option>
+          <option value="ordered_product_sales">Sales</option>
+          <option value="units_ordered">Units Ordered</option>
+          <option value="page_views">Page Views</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Statistical Method</label>
+        <select id="test-stat-method">
+          <option value="ttest">Welch's t-test</option>
+          <option value="chi_squared">Chi-Squared</option>
+          <option value="bayesian">Bayesian</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Confidence Level</label>
+        <input type="number" id="test-confidence" value="0.95" step="0.01" min="0.8" max="0.99">
+      </div>
+      <div class="form-group">
+        <label>Baseline Start *</label>
+        <input type="date" id="test-baseline-start">
+      </div>
+      <div class="form-group">
+        <label>Baseline End *</label>
+        <input type="date" id="test-baseline-end">
+      </div>
+      <div class="form-group">
+        <label>Test Period Start *</label>
+        <input type="date" id="test-period-start">
+      </div>
+      <div class="form-group">
+        <label>Min Sample Size</label>
+        <input type="number" id="test-min-sample" value="100" min="2">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('ab-test-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="createABTest()">Create Test</button>
+    </div>
+  </div>
+</div>
+
+<!-- AB TEST DETAIL MODAL -->
+<div class="modal-overlay" id="ab-test-detail-modal">
+  <div class="modal" style="max-width:750px">
+    <div id="ab-test-detail-content"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('ab-test-detail-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD METRICS MODAL -->
+<div class="modal-overlay" id="metrics-modal">
+  <div class="modal">
+    <h3>Add Metric Snapshot</h3>
+    <input type="hidden" id="metric-test-id">
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Date *</label>
+        <input type="date" id="metric-date">
+      </div>
+      <div class="form-group">
+        <label>Period Type *</label>
+        <select id="metric-period">
+          <option value="baseline">Baseline</option>
+          <option value="test">Test</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Sessions</label>
+        <input type="number" id="metric-sessions" placeholder="100">
+      </div>
+      <div class="form-group">
+        <label>Page Views</label>
+        <input type="number" id="metric-pageviews" placeholder="120">
+      </div>
+      <div class="form-group">
+        <label>Units Ordered</label>
+        <input type="number" id="metric-units" placeholder="5">
+      </div>
+      <div class="form-group">
+        <label>Conversion Rate</label>
+        <input type="number" id="metric-conversion" step="0.001" placeholder="0.05">
+      </div>
+      <div class="form-group">
+        <label>Sales ($)</label>
+        <input type="number" id="metric-sales" step="0.01" placeholder="150.00">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('metrics-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="addMetricSnapshot()">Add Metric</button>
+    </div>
+  </div>
+</div>
+
+<!-- REPORT MODAL -->
+<div class="modal-overlay" id="report-modal">
+  <div class="modal">
+    <h3>Add Business Report</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Seller *</label>
+        <select id="report-seller" onchange="loadReportProducts()"></select>
+      </div>
+      <div class="form-group">
+        <label>Marketplace *</label>
+        <select id="report-marketplace"></select>
+      </div>
+      <div class="form-group">
+        <label>Product *</label>
+        <select id="report-product"></select>
+      </div>
+      <div class="form-group">
+        <label>Report Date *</label>
+        <input type="date" id="report-date">
+      </div>
+      <div class="form-group">
+        <label>Sessions</label>
+        <input type="number" id="report-sessions" value="0">
+      </div>
+      <div class="form-group">
+        <label>Page Views</label>
+        <input type="number" id="report-pageviews" value="0">
+      </div>
+      <div class="form-group">
+        <label>Units Ordered</label>
+        <input type="number" id="report-units" value="0">
+      </div>
+      <div class="form-group">
+        <label>Conversion Rate</label>
+        <input type="number" id="report-conversion" step="0.001" value="0">
+      </div>
+      <div class="form-group">
+        <label>Ordered Product Sales</label>
+        <input type="number" id="report-sales" step="0.01" value="0">
+      </div>
+      <div class="form-group">
+        <label>Buy Box %</label>
+        <input type="number" id="report-buybox" step="0.01" value="0">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('report-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="createReport()">Add Report</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+const API = '/api/v1';
+
+// ── Helpers ──
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(API + path, opts);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || JSON.stringify(err));
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+function toast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function shortId(uuid) { return uuid ? uuid.substring(0, 8) : '-'; }
+function fmtDate(d) { return d ? new Date(d).toLocaleDateString() : '-'; }
+function fmtMoney(v, cur) { return v != null ? `${cur || '$'}${Number(v).toFixed(2)}` : '-'; }
+function fmtPct(v) { return v != null ? `${(Number(v) * 100).toFixed(1)}%` : '-'; }
+
+function statusBadge(status) {
+  const map = {
+    draft: 'badge-muted', running: 'badge-info',
+    completed: 'badge-success', reverted: 'badge-warning', paused: 'badge-warning'
+  };
+  return `<span class="badge ${map[status] || 'badge-muted'}">${status}</span>`;
+}
+
+function recBadge(rec) {
+  if (!rec) return '-';
+  const map = { keep: 'badge-success', revert: 'badge-danger', extend_test: 'badge-warning', inconclusive: 'badge-muted' };
+  return `<span class="badge ${map[rec] || 'badge-muted'}">${rec}</span>`;
+}
+
+// ── Navigation ──
+let currentSeller = null;
+let sellers = [];
+let marketplaces = [];
+
+document.querySelectorAll('.sidebar a').forEach(link => {
+  link.addEventListener('click', e => {
+    e.preventDefault();
+    const section = link.dataset.section;
+    document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
+    link.classList.add('active');
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById('sec-' + section).classList.add('active');
+    loadSection(section);
+  });
+});
+
+function loadSection(section) {
+  const loaders = {
+    'dashboard': loadDashboard,
+    'marketplaces': loadMarketplaces,
+    'sellers': loadSellers,
+    'products': loadProducts,
+    'orders': loadOrders,
+    'business-reports': loadReports,
+    'inventory': loadInventory,
+    'advertising': loadCampaigns,
+    'keywords': loadKeywords,
+    'ab-tests': loadABTests,
+  };
+  if (loaders[section]) loaders[section]();
+}
+
+// ── Dashboard ──
+async function loadDashboard() {
+  try {
+    const [mkts, sels] = await Promise.all([
+      api('GET', '/marketplaces'),
+      api('GET', '/sellers'),
+    ]);
+    sellers = sels;
+    marketplaces = mkts;
+
+    const statsEl = document.getElementById('dashboard-stats');
+    statsEl.innerHTML = `
+      <div class="stat-card">
+        <div class="label">Marketplaces</div>
+        <div class="value">${mkts.length}</div>
+        <div class="sub">Active regions</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Seller Accounts</div>
+        <div class="value">${sels.length}</div>
+        <div class="sub">Configured</div>
+      </div>
+    `;
+
+    // Load product count and test info for first seller
+    if (sels.length > 0) {
+      currentSeller = sels[0];
+      const [products, tests] = await Promise.all([
+        api('GET', `/sellers/${currentSeller.id}/products`),
+        api('GET', `/sellers/${currentSeller.id}/ab-tests`),
+      ]);
+
+      statsEl.innerHTML += `
+        <div class="stat-card">
+          <div class="label">Products</div>
+          <div class="value">${products.length}</div>
+          <div class="sub">${currentSeller.seller_name}</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">A/B Tests</div>
+          <div class="value">${tests.length}</div>
+          <div class="sub">${tests.filter(t => t.status === 'running').length} running</div>
+        </div>
+      `;
+
+      const testsEl = document.getElementById('dashboard-recent-tests');
+      if (tests.length === 0) {
+        testsEl.innerHTML = '<div class="empty-state"><p>No A/B tests yet. Create one to start optimizing your listings.</p></div>';
+      } else {
+        testsEl.innerHTML = `<table><thead><tr>
+          <th>Test Name</th><th>Product</th><th>Change</th><th>Status</th><th>Created</th>
+        </tr></thead><tbody>${tests.slice(0, 5).map(t => `<tr>
+          <td><a href="#" onclick="viewTestDetail('${t.id}')">${t.test_name}</a></td>
+          <td>${shortId(t.product_id)}</td>
+          <td>${t.change_type}</td>
+          <td>${statusBadge(t.status)}</td>
+          <td>${fmtDate(t.created_at)}</td>
+        </tr>`).join('')}</tbody></table>`;
+      }
+    } else {
+      document.getElementById('dashboard-recent-tests').innerHTML =
+        '<div class="empty-state"><p>Create a seller account to get started.</p></div>';
+    }
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+// ── Marketplaces ──
+async function loadMarketplaces() {
+  try {
+    marketplaces = await api('GET', '/marketplaces');
+    const el = document.getElementById('marketplaces-table');
+    if (marketplaces.length === 0) {
+      el.innerHTML = '<div class="empty-state"><p>No marketplaces found. Run the seed script to populate them.</p></div>';
+      return;
+    }
+    el.innerHTML = `<table><thead><tr>
+      <th>Code</th><th>Name</th><th>Region</th><th>Currency</th><th>Domain</th><th>Marketplace ID</th>
+    </tr></thead><tbody>${marketplaces.map(m => `<tr>
+      <td><strong>${m.code}</strong></td>
+      <td>${m.name}</td>
+      <td>${m.region}</td>
+      <td>${m.default_currency || '-'}</td>
+      <td>${m.domain || '-'}</td>
+      <td><code>${m.amazon_marketplace_id || '-'}</code></td>
+    </tr>`).join('')}</tbody></table>`;
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Sellers ──
+async function loadSellers() {
+  try {
+    sellers = await api('GET', '/sellers');
+    const el = document.getElementById('sellers-table');
+    if (sellers.length === 0) {
+      el.innerHTML = '<div class="empty-state"><p>No seller accounts yet. Create one to get started.</p></div>';
+      return;
+    }
+    el.innerHTML = `<table><thead><tr>
+      <th>ID</th><th>Seller Name</th><th>Company</th><th>Created</th>
+    </tr></thead><tbody>${sellers.map(s => `<tr>
+      <td><code>${shortId(s.id)}</code></td>
+      <td><strong>${s.seller_name}</strong></td>
+      <td>${s.company_name || '-'}</td>
+      <td>${fmtDate(s.created_at)}</td>
+    </tr>`).join('')}</tbody></table>`;
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function createSeller() {
+  try {
+    const name = document.getElementById('seller-name').value;
+    if (!name) { toast('Seller name is required', 'error'); return; }
+    await api('POST', '/sellers', {
+      seller_name: name,
+      company_name: document.getElementById('seller-company').value || null,
+    });
+    closeModal('seller-modal');
+    toast('Seller created successfully');
+    loadSellers();
+    document.getElementById('seller-name').value = '';
+    document.getElementById('seller-company').value = '';
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Products ──
+async function loadProducts() {
+  try {
+    sellers = await api('GET', '/sellers');
+    if (sellers.length === 0) {
+      document.getElementById('products-table').innerHTML = '<div class="empty-state"><p>Create a seller account first.</p></div>';
+      return;
+    }
+    let all = [];
+    for (const s of sellers) {
+      const prods = await api('GET', `/sellers/${s.id}/products`);
+      prods.forEach(p => p._seller = s.seller_name);
+      all = all.concat(prods);
+    }
+    const el = document.getElementById('products-table');
+    if (all.length === 0) {
+      el.innerHTML = '<div class="empty-state"><p>No products yet. Add your first product.</p></div>';
+      return;
+    }
+    el.innerHTML = `<table><thead><tr>
+      <th>ASIN</th><th>SKU</th><th>Title</th><th>Price</th><th>Seller</th><th>Created</th>
+    </tr></thead><tbody>${all.map(p => `<tr>
+      <td><code>${p.asin}</code></td>
+      <td>${p.sku || '-'}</td>
+      <td>${p.title || '-'}</td>
+      <td>${fmtMoney(p.price, p.currency)}</td>
+      <td>${p._seller}</td>
+      <td>${fmtDate(p.created_at)}</td>
+    </tr>`).join('')}</tbody></table>`;
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function openCreateProductModal() {
+  sellers = await api('GET', '/sellers');
+  marketplaces = await api('GET', '/marketplaces');
+  document.getElementById('prod-seller').innerHTML = sellers.map(s =>
+    `<option value="${s.id}">${s.seller_name}</option>`).join('');
+  document.getElementById('prod-marketplace').innerHTML = marketplaces.map(m =>
+    `<option value="${m.id}">${m.name} (${m.code})</option>`).join('');
+  openModal('product-modal');
+}
+
+async function createProduct() {
+  try {
+    const sellerId = document.getElementById('prod-seller').value;
+    await api('POST', `/sellers/${sellerId}/products`, {
+      marketplace_id: document.getElementById('prod-marketplace').value,
+      asin: document.getElementById('prod-asin').value,
+      sku: document.getElementById('prod-sku').value || null,
+      title: document.getElementById('prod-title').value,
+      price: parseFloat(document.getElementById('prod-price').value) || null,
+      currency: document.getElementById('prod-currency').value,
+    });
+    closeModal('product-modal');
+    toast('Product created successfully');
+    loadProducts();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Orders ──
+async function loadOrders() {
+  try {
+    sellers = await api('GET', '/sellers');
+    if (sellers.length === 0) {
+      document.getElementById('orders-table').innerHTML = '<div class="empty-state"><p>Create a seller account first.</p></div>';
+      return;
+    }
+    let all = [];
+    for (const s of sellers) {
+      const orders = await api('GET', `/sellers/${s.id}/orders`);
+      orders.forEach(o => o._seller = s.seller_name);
+      all = all.concat(orders);
+    }
+    const el = document.getElementById('orders-table');
+    if (all.length === 0) {
+      el.innerHTML = '<div class="empty-state"><p>No orders yet.</p></div>';
+      return;
+    }
+    el.innerHTML = `<table><thead><tr>
+      <th>Order ID</th><th>Status</th><th>Channel</th><th>Total</th><th>Items</th><th>Date</th>
+    </tr></thead><tbody>${all.map(o => `<tr>
+      <td><code>${o.amazon_order_id}</code></td>
+      <td>${statusBadge(o.order_status)}</td>
+      <td>${o.fulfillment_channel}</td>
+      <td>${fmtMoney(o.order_total, o.currency)}</td>
+      <td>${o.line_items ? o.line_items.length : 0}</td>
+      <td>${fmtDate(o.purchase_date)}</td>
+    </tr>`).join('')}</tbody></table>`;
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Business Reports ──
+async function loadReports() {
+  try {
+    sellers = await api('GET', '/sellers');
+    if (sellers.length === 0) {
+      document.getElementById('reports-table').innerHTML = '<div class="empty-state"><p>Create a seller account first.</p></div>';
+      return;
+    }
+    let all = [];
+    for (const s of sellers) {
+      try {
+        const reports = await api('GET', `/sellers/${s.id}/business-reports`);
+        reports.forEach(r => r._seller = s.seller_name);
+        all = all.concat(reports);
+      } catch (e) { /* skip */ }
+    }
+    const el = document.getElementById('reports-table');
+    if (all.length === 0) {
+      el.innerHTML = '<div class="empty-state"><p>No business reports yet. Add report data to start tracking.</p></div>';
+      return;
+    }
+    el.innerHTML = `<table><thead><tr>
+      <th>Date</th><th>ASIN</th><th>Sessions</th><th>Page Views</th><th>Units</th><th>Conv Rate</th><th>Sales</th><th>Buy Box %</th>
+    </tr></thead><tbody>${all.map(r => `<tr>
+      <td>${fmtDate(r.report_date)}</td>
+      <td><code>${r.asin || '-'}</code></td>
+      <td>${r.sessions || 0}</td>
+      <td>${r.page_views || 0}</td>
+      <td>${r.units_ordered || 0}</td>
+      <td>${fmtPct(r.unit_session_percentage)}</td>
+      <td>${fmtMoney(r.ordered_product_sales)}</td>
+      <td>${fmtPct(r.buy_box_percentage)}</td>
+    </tr>`).join('')}</tbody></table>`;
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function createReport() {
+  try {
+    const sellerId = document.getElementById('report-seller').value;
+    await api('POST', `/sellers/${sellerId}/business-reports`, {
+      marketplace_id: document.getElementById('report-marketplace').value,
+      product_id: document.getElementById('report-product').value || null,
+      report_date: document.getElementById('report-date').value,
+      sessions: parseInt(document.getElementById('report-sessions').value) || 0,
+      page_views: parseInt(document.getElementById('report-pageviews').value) || 0,
+      units_ordered: parseInt(document.getElementById('report-units').value) || 0,
+      unit_session_percentage: parseFloat(document.getElementById('report-conversion').value) || 0,
+      ordered_product_sales: parseFloat(document.getElementById('report-sales').value) || 0,
+      buy_box_percentage: parseFloat(document.getElementById('report-buybox').value) || 0,
+    });
+    closeModal('report-modal');
+    toast('Report added successfully');
+    loadReports();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function loadReportProducts() {
+  const sellerId = document.getElementById('report-seller').value;
+  if (!sellerId) return;
+  const products = await api('GET', `/sellers/${sellerId}/products`);
+  document.getElementById('report-product').innerHTML =
+    '<option value="">-- Select --</option>' +
+    products.map(p => `<option value="${p.id}">${p.asin} - ${p.title || 'Untitled'}</option>`).join('');
+}
+
+// ── Inventory (placeholder) ──
+async function loadInventory() {
+  try {
+    sellers = await api('GET', '/sellers');
+    if (sellers.length === 0) {
+      document.getElementById('inventory-table').innerHTML = '<div class="empty-state"><p>Create a seller account first.</p></div>';
+      return;
+    }
+    let all = [];
+    for (const s of sellers) {
+      try {
+        const inv = await api('GET', `/sellers/${s.id}/inventory/fba`);
+        all = all.concat(inv);
+      } catch (e) { /* skip */ }
+    }
+    const el = document.getElementById('inventory-table');
+    if (all.length === 0) {
+      el.innerHTML = '<div class="empty-state"><p>No inventory data yet.</p></div>';
+      return;
+    }
+    el.innerHTML = `<table><thead><tr>
+      <th>ASIN</th><th>SKU</th><th>Fulfillable</th><th>Inbound</th><th>Reserved</th><th>Updated</th>
+    </tr></thead><tbody>${all.map(i => `<tr>
+      <td><code>${i.asin || '-'}</code></td>
+      <td>${i.sku || '-'}</td>
+      <td>${i.fulfillable_quantity || 0}</td>
+      <td>${i.inbound_quantity || 0}</td>
+      <td>${i.reserved_quantity || 0}</td>
+      <td>${fmtDate(i.snapshot_date)}</td>
+    </tr>`).join('')}</tbody></table>`;
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Advertising ──
+async function loadCampaigns() {
+  try {
+    sellers = await api('GET', '/sellers');
+    if (sellers.length === 0) {
+      document.getElementById('campaigns-table').innerHTML = '<div class="empty-state"><p>Create a seller account first.</p></div>';
+      return;
+    }
+    let all = [];
+    for (const s of sellers) {
+      try {
+        const camps = await api('GET', `/sellers/${s.id}/campaigns`);
+        all = all.concat(camps);
+      } catch (e) { /* skip */ }
+    }
+    const el = document.getElementById('campaigns-table');
+    if (all.length === 0) {
+      el.innerHTML = '<div class="empty-state"><p>No advertising campaigns yet.</p></div>';
+      return;
+    }
+    el.innerHTML = `<table><thead><tr>
+      <th>Name</th><th>Type</th><th>State</th><th>Budget</th><th>Start</th><th>End</th>
+    </tr></thead><tbody>${all.map(c => `<tr>
+      <td>${c.campaign_name}</td>
+      <td>${c.campaign_type}</td>
+      <td>${statusBadge(c.state)}</td>
+      <td>${fmtMoney(c.daily_budget, c.currency)}</td>
+      <td>${fmtDate(c.start_date)}</td>
+      <td>${fmtDate(c.end_date)}</td>
+    </tr>`).join('')}</tbody></table>`;
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Keywords ──
+async function loadKeywords() {
+  try {
+    sellers = await api('GET', '/sellers');
+    if (sellers.length === 0) {
+      document.getElementById('keywords-table').innerHTML = '<div class="empty-state"><p>Create a seller account first.</p></div>';
+      return;
+    }
+    let all = [];
+    for (const s of sellers) {
+      try {
+        const kw = await api('GET', `/sellers/${s.id}/keywords`);
+        all = all.concat(kw);
+      } catch (e) { /* skip */ }
+    }
+    const el = document.getElementById('keywords-table');
+    if (all.length === 0) {
+      el.innerHTML = '<div class="empty-state"><p>No keyword ranking data yet.</p></div>';
+      return;
+    }
+    el.innerHTML = `<table><thead><tr>
+      <th>Keyword</th><th>ASIN</th><th>Organic Rank</th><th>Sponsored Rank</th><th>Date</th>
+    </tr></thead><tbody>${all.map(k => `<tr>
+      <td>${k.keyword}</td>
+      <td><code>${k.asin || '-'}</code></td>
+      <td>${k.organic_rank || '-'}</td>
+      <td>${k.sponsored_rank || '-'}</td>
+      <td>${fmtDate(k.check_date)}</td>
+    </tr>`).join('')}</tbody></table>`;
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── A/B Tests ──
+async function loadABTests() {
+  try {
+    sellers = await api('GET', '/sellers');
+    if (sellers.length === 0) {
+      document.getElementById('ab-tests-table').innerHTML = '<div class="empty-state"><p>Create a seller account first.</p></div>';
+      return;
+    }
+    let all = [];
+    for (const s of sellers) {
+      const tests = await api('GET', `/sellers/${s.id}/ab-tests`);
+      tests.forEach(t => t._seller = s.seller_name);
+      all = all.concat(tests);
+    }
+    const el = document.getElementById('ab-tests-table');
+    if (all.length === 0) {
+      el.innerHTML = '<div class="empty-state"><p>No A/B tests yet. Create one to start optimizing.</p></div>';
+      return;
+    }
+    el.innerHTML = `<table><thead><tr>
+      <th>Test Name</th><th>Change</th><th>Metric</th><th>Method</th><th>Status</th><th>Created</th><th>Actions</th>
+    </tr></thead><tbody>${all.map(t => `<tr>
+      <td><a href="#" onclick="viewTestDetail('${t.id}')">${t.test_name}</a></td>
+      <td>${t.change_type}</td>
+      <td>${t.primary_metric}</td>
+      <td>${t.stat_method || 'ttest'}</td>
+      <td>${statusBadge(t.status)}</td>
+      <td>${fmtDate(t.created_at)}</td>
+      <td>
+        ${t.status === 'draft' ? `<button class="btn btn-sm btn-primary" onclick="startTest('${t.id}')">Start</button>` : ''}
+        ${t.status === 'running' ? `<button class="btn btn-sm" onclick="openMetricsModal('${t.id}')">+ Metrics</button>
+          <button class="btn btn-sm btn-primary" onclick="completeTest('${t.id}')">Complete</button>` : ''}
+        ${t.status === 'completed' ? `<button class="btn btn-sm" onclick="viewTestDetail('${t.id}')">Results</button>` : ''}
+      </td>
+    </tr>`).join('')}</tbody></table>`;
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function openCreateTestModal() {
+  sellers = await api('GET', '/sellers');
+  document.getElementById('test-seller').innerHTML = sellers.map(s =>
+    `<option value="${s.id}">${s.seller_name}</option>`).join('');
+  await loadTestProducts();
+  openModal('ab-test-modal');
+}
+
+async function loadTestProducts() {
+  const sellerId = document.getElementById('test-seller').value;
+  if (!sellerId) return;
+  const products = await api('GET', `/sellers/${sellerId}/products`);
+  document.getElementById('test-product').innerHTML = products.map(p =>
+    `<option value="${p.id}">${p.asin} - ${p.title || 'Untitled'}</option>`).join('');
+}
+
+async function createABTest() {
+  try {
+    const sellerId = document.getElementById('test-seller').value;
+    await api('POST', `/sellers/${sellerId}/ab-tests`, {
+      product_id: document.getElementById('test-product').value,
+      test_name: document.getElementById('test-name').value,
+      change_type: document.getElementById('test-change-type').value,
+      hypothesis: document.getElementById('test-hypothesis').value || null,
+      primary_metric: document.getElementById('test-primary-metric').value,
+      stat_method: document.getElementById('test-stat-method').value,
+      confidence_level: parseFloat(document.getElementById('test-confidence').value),
+      baseline_period_start: document.getElementById('test-baseline-start').value,
+      baseline_period_end: document.getElementById('test-baseline-end').value,
+      test_period_start: document.getElementById('test-period-start').value,
+      minimum_sample_size: parseInt(document.getElementById('test-min-sample').value),
+    });
+    closeModal('ab-test-modal');
+    toast('A/B Test created successfully');
+    loadABTests();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function startTest(testId) {
+  try {
+    await api('POST', `/ab-tests/${testId}/start`);
+    toast('Test started');
+    loadABTests();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function openMetricsModal(testId) {
+  document.getElementById('metric-test-id').value = testId;
+  openModal('metrics-modal');
+}
+
+async function addMetricSnapshot() {
+  try {
+    const testId = document.getElementById('metric-test-id').value;
+    await api('POST', `/ab-tests/${testId}/metrics`, {
+      snapshot_date: document.getElementById('metric-date').value,
+      period_type: document.getElementById('metric-period').value,
+      sessions: parseInt(document.getElementById('metric-sessions').value) || null,
+      page_views: parseInt(document.getElementById('metric-pageviews').value) || null,
+      units_ordered: parseInt(document.getElementById('metric-units').value) || null,
+      unit_session_percentage: parseFloat(document.getElementById('metric-conversion').value) || null,
+      ordered_product_sales: parseFloat(document.getElementById('metric-sales').value) || null,
+    });
+    toast('Metric snapshot added');
+    closeModal('metrics-modal');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function completeTest(testId) {
+  try {
+    const result = await api('POST', `/ab-tests/${testId}/complete`);
+    toast('Test completed! Check results.');
+    loadABTests();
+    viewTestDetail(testId);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function viewTestDetail(testId) {
+  try {
+    const test = await api('GET', `/ab-tests/${testId}`);
+    const metrics = await api('GET', `/ab-tests/${testId}/metrics`);
+
+    const baselineMetrics = metrics.filter(m => m.period_type === 'baseline');
+    const testMetrics = metrics.filter(m => m.period_type === 'test');
+
+    let html = `
+      <h3>${test.test_name}</h3>
+      <div style="margin-bottom:16px">
+        ${statusBadge(test.status)}
+        <span style="margin-left:8px;color:var(--text-muted);font-size:13px">
+          ${test.change_type} | ${test.primary_metric} | ${test.stat_method || 'ttest'}
+        </span>
+      </div>
+      ${test.hypothesis ? `<p style="font-size:13px;color:var(--text-muted);margin-bottom:12px"><strong>Hypothesis:</strong> ${test.hypothesis}</p>` : ''}
+      <div class="result-grid" style="margin-bottom:16px">
+        <div class="result-box">
+          <div class="label">Baseline Period</div>
+          <div class="val" style="font-size:14px">${fmtDate(test.baseline_period_start)} - ${fmtDate(test.baseline_period_end)}</div>
+          <div class="label" style="margin-top:4px">${baselineMetrics.length} data points</div>
+        </div>
+        <div class="result-box">
+          <div class="label">Test Period</div>
+          <div class="val" style="font-size:14px">${fmtDate(test.test_period_start)} - ${fmtDate(test.test_period_end) !== '-' ? fmtDate(test.test_period_end) : 'ongoing'}</div>
+          <div class="label" style="margin-top:4px">${testMetrics.length} data points</div>
+        </div>
+      </div>
+    `;
+
+    if (test.result) {
+      const r = test.result;
+      html += `
+        <div class="card" style="border: 2px solid ${r.recommendation === 'keep' ? 'var(--success)' : r.recommendation === 'revert' ? 'var(--danger)' : 'var(--warning)'}; margin-bottom:16px">
+          <h3>Results</h3>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+            <span style="font-size:24px;font-weight:700">${recBadge(r.recommendation)}</span>
+            <span style="font-size:13px;color:var(--text-muted)">${r.recommendation_reason || ''}</span>
+          </div>
+          <div class="result-grid">
+            <div class="result-box">
+              <div class="label">Baseline Mean</div>
+              <div class="val">${r.baseline_mean != null ? Number(r.baseline_mean).toFixed(4) : '-'}</div>
+            </div>
+            <div class="result-box">
+              <div class="label">Variant Mean</div>
+              <div class="val">${r.variant_mean != null ? Number(r.variant_mean).toFixed(4) : '-'}</div>
+            </div>
+            <div class="result-box">
+              <div class="label">P-Value</div>
+              <div class="val">${r.p_value != null ? Number(r.p_value).toFixed(6) : '-'}</div>
+            </div>
+            <div class="result-box">
+              <div class="label">Statistically Significant</div>
+              <div class="val">${r.is_significant ? '<span style="color:var(--success)">Yes</span>' : '<span style="color:var(--danger)">No</span>'}</div>
+            </div>
+            ${r.relative_difference_pct != null ? `<div class="result-box">
+              <div class="label">Relative Change</div>
+              <div class="val" style="color:${r.relative_difference_pct >= 0 ? 'var(--success)' : 'var(--danger)'}">
+                ${r.relative_difference_pct >= 0 ? '+' : ''}${Number(r.relative_difference_pct).toFixed(1)}%
+              </div>
+            </div>` : ''}
+            ${r.confidence_interval_lower != null ? `<div class="result-box">
+              <div class="label">Confidence Interval</div>
+              <div class="val" style="font-size:14px">[${Number(r.confidence_interval_lower).toFixed(4)}, ${Number(r.confidence_interval_upper).toFixed(4)}]</div>
+            </div>` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    if (metrics.length > 0) {
+      html += `<div class="card"><h3>Metric Snapshots (${metrics.length})</h3>
+        <table><thead><tr>
+          <th>Date</th><th>Period</th><th>Sessions</th><th>Units</th><th>Conv Rate</th><th>Sales</th>
+        </tr></thead><tbody>${metrics.map(m => `<tr>
+          <td>${fmtDate(m.snapshot_date)}</td>
+          <td><span class="badge ${m.period_type === 'baseline' ? 'badge-muted' : 'badge-info'}">${m.period_type}</span></td>
+          <td>${m.sessions || '-'}</td>
+          <td>${m.units_ordered || '-'}</td>
+          <td>${fmtPct(m.unit_session_percentage)}</td>
+          <td>${fmtMoney(m.ordered_product_sales)}</td>
+        </tr>`).join('')}</tbody></table></div>`;
+    }
+
+    document.getElementById('ab-test-detail-content').innerHTML = html;
+    openModal('ab-test-detail-modal');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Init ──
+loadDashboard();
+</script>
+</body>
+</html>
