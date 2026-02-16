@@ -57,12 +57,18 @@ async def update_test(test_id: UUID, data: ABTestUpdate, engine: ABTestEngine = 
 
 @router.post("/ab-tests/{test_id}/start", response_model=ABTestRead, tags=["A/B Tests"])
 async def start_test(test_id: UUID, engine: ABTestEngine = Depends(_get_engine)):
-    return await engine.start_test(test_id)
+    try:
+        return await engine.start_test(test_id)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
 
 @router.post("/ab-tests/{test_id}/complete", response_model=ABTestDetailRead, tags=["A/B Tests"])
 async def complete_test(test_id: UUID, engine: ABTestEngine = Depends(_get_engine)):
-    return await engine.complete_test(test_id)
+    try:
+        return await engine.complete_test(test_id)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
 
 @router.get("/ab-tests/{test_id}/results", response_model=ABTestResultRead, tags=["A/B Tests"])

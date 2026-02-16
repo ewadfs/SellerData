@@ -50,7 +50,11 @@ async def create_order(db: AsyncSession, seller_id: uuid.UUID, data: OrderCreate
         db.add(line_item)
 
     await db.flush()
-    return order
+
+    # Reload with line_items eagerly loaded for serialization
+    stmt = select(Order).where(Order.id == order.id).options(selectinload(Order.line_items))
+    result = await db.execute(stmt)
+    return result.scalar_one()
 
 
 async def create_refund(db: AsyncSession, data: RefundCreate) -> Refund:

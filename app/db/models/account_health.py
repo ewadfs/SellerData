@@ -1,8 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Integer, Numeric, String, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Date, DateTime, Integer, Numeric, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -11,9 +10,9 @@ from app.db.base import Base
 class AccountHealthMetric(Base):
     __tablename__ = "account_health_metrics"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    seller_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    marketplace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    seller_account_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    marketplace_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     snapshot_date: Mapped[date] = mapped_column(Date, nullable=False)
     order_defect_rate: Mapped[float | None] = mapped_column(Numeric(8, 6), nullable=True)
     late_shipment_rate: Mapped[float | None] = mapped_column(Numeric(8, 6), nullable=True)

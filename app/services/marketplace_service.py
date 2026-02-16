@@ -43,6 +43,7 @@ async def update_seller(db: AsyncSession, seller_id: uuid.UUID, data: SellerAcco
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(seller, field, value)
     await db.flush()
+    await db.refresh(seller)
     return seller
 
 

@@ -1,8 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Integer, Numeric, String, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Date, DateTime, Integer, Numeric, String, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -12,8 +11,8 @@ class FBAInventory(Base):
     __tablename__ = "fba_inventory"
     __table_args__ = (UniqueConstraint("product_id", "snapshot_date"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    product_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     snapshot_date: Mapped[date] = mapped_column(Date, nullable=False)
     fulfillable_quantity: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     inbound_working: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -33,8 +32,8 @@ class FBAInventory(Base):
 class StrandedInventory(Base):
     __tablename__ = "stranded_inventory"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    product_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     snapshot_date: Mapped[date] = mapped_column(Date, nullable=False)
     stranded_quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
     stranded_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -45,8 +44,8 @@ class StrandedInventory(Base):
 class AgedInventory(Base):
     __tablename__ = "aged_inventory"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    product_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     snapshot_date: Mapped[date] = mapped_column(Date, nullable=False)
     qty_0_90_days: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     qty_91_180_days: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -61,8 +60,8 @@ class AgedInventory(Base):
 class RestockRecommendation(Base):
     __tablename__ = "restock_recommendations"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    product_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     snapshot_date: Mapped[date] = mapped_column(Date, nullable=False)
     recommended_ship_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     recommended_quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)

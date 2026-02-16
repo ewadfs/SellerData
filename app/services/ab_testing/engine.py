@@ -1,6 +1,8 @@
 import uuid
 from datetime import date, datetime, timezone
 
+import math
+
 import numpy as np
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,6 +48,7 @@ class ABTestEngine:
         )
         self.db.add(test)
         await self.db.flush()
+        await self.db.refresh(test)
         return test
 
     async def get_test(self, test_id: uuid.UUID) -> ABTest | None:
@@ -64,6 +67,7 @@ class ABTestEngine:
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(test, field, value)
         await self.db.flush()
+        await self.db.refresh(test)
         return test
 
     async def start_test(self, test_id: uuid.UUID) -> ABTest:
@@ -75,6 +79,7 @@ class ABTestEngine:
         test.status = ABTestStatus.RUNNING.value
         test.test_period_start = date.today()
         await self.db.flush()
+        await self.db.refresh(test)
         return test
 
     async def complete_test(self, test_id: uuid.UUID) -> ABTest:
@@ -155,6 +160,17 @@ class ABTestEngine:
         else:
             # Default to t-test
             result_data = self._run_ttest(baseline_values, variant_values, confidence_level, test, result_data)
+
+        # Sanitize float values to avoid inf/nan
+        float_fields = [
+            "baseline_mean", "variant_mean", "baseline_std", "variant_std",
+            "absolute_difference", "relative_difference_pct", "p_value",
+            "t_statistic", "chi_squared_statistic", "bayesian_probability_b_better",
+            "bayesian_expected_loss", "confidence_interval_lower", "confidence_interval_upper",
+        ]
+        for field in float_fields:
+            if field in result_data:
+                result_data[field] = self._sanitize_float(result_data[field])
 
         # Delete any existing result
         existing = await self.get_result(test.id)
@@ -250,6 +266,16 @@ class ABTestEngine:
             recommendation_reason=recommendation.reason,
         )
         return result_data
+
+    @staticmethod
+    def _sanitize_float(value) -> float | None:
+        """Convert inf/nan to None for JSON compatibility."""
+        if value is None:
+            return None
+        f = float(value)
+        if math.isnan(f) or math.isinf(f):
+            return None
+        return f
 
     @staticmethod
     def _extract_metric(snapshots: list[ABTestMetricSnapshot], metric_name: str) -> list[float]:

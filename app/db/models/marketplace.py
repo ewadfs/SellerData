@@ -38,12 +38,12 @@ class SellerMarketplaceLink(Base):
     __tablename__ = "seller_marketplace_links"
     __table_args__ = (UniqueConstraint("seller_account_id", "marketplace_id"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     seller_account_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("seller_accounts.id"), nullable=False
+        Uuid, ForeignKey("seller_accounts.id"), nullable=False
     )
     marketplace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("marketplaces.id"), nullable=False
+        Uuid, ForeignKey("marketplaces.id"), nullable=False
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

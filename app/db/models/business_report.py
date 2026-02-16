@@ -1,8 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Index, Integer, Numeric, String, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Date, DateTime, Index, Integer, Numeric, String, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -15,8 +14,8 @@ class BusinessReportDaily(Base):
         Index("ix_business_report_daily_date", "report_date"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    product_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     report_date: Mapped[date] = mapped_column(Date, nullable=False)
     sessions: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     session_percentage: Mapped[float | None] = mapped_column(Numeric(6, 4), nullable=True)

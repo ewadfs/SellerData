@@ -1,8 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -16,10 +15,10 @@ class Order(TimestampMixin, Base):
     )
 
     seller_account_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("seller_accounts.id"), nullable=False
+        Uuid, ForeignKey("seller_accounts.id"), nullable=False
     )
     marketplace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("marketplaces.id"), nullable=False
+        Uuid, ForeignKey("marketplaces.id"), nullable=False
     )
     amazon_order_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     purchase_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -40,10 +39,10 @@ class Order(TimestampMixin, Base):
 class OrderLineItem(Base):
     __tablename__ = "order_line_items"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    order_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    order_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("orders.id"), nullable=False)
     product_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("products.id"), nullable=True
+        Uuid, ForeignKey("products.id"), nullable=True
     )
     asin: Mapped[str] = mapped_column(String(20), nullable=False)
     sku: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -63,9 +62,9 @@ class OrderLineItem(Base):
 class Refund(Base):
     __tablename__ = "refunds"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     order_line_item_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("order_line_items.id"), nullable=False
+        Uuid, ForeignKey("order_line_items.id"), nullable=False
     )
     refund_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     quantity_refunded: Mapped[int] = mapped_column(Integer, nullable=False)

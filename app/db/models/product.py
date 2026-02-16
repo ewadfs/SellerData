@@ -1,8 +1,8 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, Uuid, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -16,10 +16,10 @@ class Product(TimestampMixin, Base):
     )
 
     seller_account_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("seller_accounts.id"), nullable=False
+        Uuid, ForeignKey("seller_accounts.id"), nullable=False
     )
     marketplace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("marketplaces.id"), nullable=False
+        Uuid, ForeignKey("marketplaces.id"), nullable=False
     )
     asin: Mapped[str] = mapped_column(String(20), nullable=False)
     sku: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -39,8 +39,8 @@ class ProductSnapshot(Base):
     __tablename__ = "product_snapshots"
     __table_args__ = (Index("ix_product_snapshots_product_date", "product_id", "snapshot_date"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    product_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("products.id"), nullable=False)
     snapshot_date: Mapped[date] = mapped_column(Date, nullable=False)
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
     bullet_points: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

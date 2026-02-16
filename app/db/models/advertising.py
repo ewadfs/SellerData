@@ -1,8 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Index, Integer, Numeric, String, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -11,8 +10,8 @@ from app.db.base import Base, TimestampMixin
 class AdCampaign(TimestampMixin, Base):
     __tablename__ = "ad_campaigns"
 
-    seller_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    marketplace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    seller_account_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    marketplace_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     amazon_campaign_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
     campaign_name: Mapped[str] = mapped_column(String(500), nullable=False)
     campaign_type: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -29,8 +28,8 @@ class AdCampaign(TimestampMixin, Base):
 class AdGroup(Base):
     __tablename__ = "ad_groups"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    campaign_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("ad_campaigns.id"), nullable=False)
     amazon_ad_group_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
     ad_group_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
     state: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -45,8 +44,8 @@ class AdGroup(Base):
 class AdKeywordTarget(Base):
     __tablename__ = "ad_keyword_targets"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    ad_group_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    ad_group_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("ad_groups.id"), nullable=False)
     keyword_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
     match_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
     bid: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
@@ -59,8 +58,8 @@ class AdKeywordTarget(Base):
 class AdProductTarget(Base):
     __tablename__ = "ad_product_targets"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    ad_group_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    ad_group_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("ad_groups.id"), nullable=False)
     target_asin: Mapped[str | None] = mapped_column(String(20), nullable=True)
     target_category: Mapped[str | None] = mapped_column(String(255), nullable=True)
     bid: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
@@ -77,11 +76,11 @@ class AdMetricsDaily(Base):
         Index("ix_ad_metrics_daily_date", "report_date"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    campaign_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    ad_group_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    product_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    keyword_target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    ad_group_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    product_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    keyword_target_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     report_date: Mapped[date] = mapped_column(Date, nullable=False)
     impressions: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     clicks: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

@@ -1,8 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Index, Integer, Numeric, String, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Date, DateTime, Index, Integer, Numeric, String, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -15,8 +14,8 @@ class KeywordRanking(Base):
         Index("ix_keyword_rankings_keyword_date", "keyword", "check_date"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    product_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     keyword: Mapped[str] = mapped_column(String(500), nullable=False)
     check_date: Mapped[date] = mapped_column(Date, nullable=False)
     organic_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -29,8 +28,8 @@ class KeywordRanking(Base):
 class SearchVisibilityScore(Base):
     __tablename__ = "search_visibility_scores"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    product_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     score_date: Mapped[date] = mapped_column(Date, nullable=False)
     tracked_keywords_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     keywords_in_top_10: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -1,8 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Index, Integer, Numeric, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Date, DateTime, Index, Integer, Numeric, String, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -15,9 +14,9 @@ class SearchTermReport(Base):
         Index("ix_search_term_reports_date", "report_date_start"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    seller_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    marketplace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    seller_account_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    marketplace_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     report_date_start: Mapped[date] = mapped_column(Date, nullable=False)
     report_date_end: Mapped[date] = mapped_column(Date, nullable=False)
     search_term: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -37,9 +36,9 @@ class SearchTermReport(Base):
 class MarketBasketReport(Base):
     __tablename__ = "market_basket_reports"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    seller_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    marketplace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    seller_account_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    marketplace_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     report_date_start: Mapped[date] = mapped_column(Date, nullable=False)
     report_date_end: Mapped[date] = mapped_column(Date, nullable=False)
     asin: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -52,9 +51,9 @@ class MarketBasketReport(Base):
 class RepeatPurchaseReport(Base):
     __tablename__ = "repeat_purchase_reports"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    seller_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    marketplace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    seller_account_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    marketplace_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     report_date_start: Mapped[date] = mapped_column(Date, nullable=False)
     report_date_end: Mapped[date] = mapped_column(Date, nullable=False)
     asin: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -70,9 +69,9 @@ class RepeatPurchaseReport(Base):
 class DemographicsReport(Base):
     __tablename__ = "demographics_reports"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    seller_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    marketplace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    seller_account_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    marketplace_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     report_date_start: Mapped[date] = mapped_column(Date, nullable=False)
     report_date_end: Mapped[date] = mapped_column(Date, nullable=False)
     asin: Mapped[str] = mapped_column(String(20), nullable=False)
