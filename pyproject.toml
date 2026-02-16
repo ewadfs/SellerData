@@ -27,6 +27,9 @@ dev = [
     "ruff>=0.8",
 ]
 
+[tool.setuptools.packages.find]
+include = ["app*", "scripts*"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
