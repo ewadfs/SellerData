@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "SellerData - Amazon Seller Central Messaging Assistant",
-  "version": "1.0.0",
-  "description": "AI-powered customer messaging assistant for Amazon Seller Central with quick refund and replacement actions.",
+  "version": "2.0.0",
+  "description": "AI-powered customer messaging assistant for Amazon Seller Central with guided refund and replacement workflows.",
   "permissions": [
     "activeTab",
-    "storage"
+    "storage",
+    "tabs"
   ],
   "host_permissions": [
     "https://sellercentral.amazon.com/*",
@@ -24,18 +25,14 @@
   "content_scripts": [
     {
       "matches": [
-        "https://sellercentral.amazon.com/messaging/*",
-        "https://sellercentral.amazon.com/buyer-messages/*",
-        "https://sellercentral.amazon.com/gp/communication-manager/*",
-        "https://sellercentral.amazon.co.uk/messaging/*",
-        "https://sellercentral.amazon.co.uk/buyer-messages/*",
-        "https://sellercentral.amazon.de/messaging/*",
-        "https://sellercentral.amazon.de/buyer-messages/*",
-        "https://sellercentral.amazon.co.jp/messaging/*",
-        "https://sellercentral.amazon.co.jp/buyer-messages/*"
+        "https://sellercentral.amazon.com/*",
+        "https://sellercentral.amazon.co.uk/*",
+        "https://sellercentral.amazon.de/*",
+        "https://sellercentral.amazon.co.jp/*"
       ],
       "js": ["lib/utils.js", "content.js"],
-      "css": ["content.css"]
+      "css": ["content.css"],
+      "run_at": "document_idle"
     }
   ],
   "background": {

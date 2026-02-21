@@ -13,7 +13,9 @@
       <span class="subtitle">Messaging Assistant</span>
     </header>
 
-    <!-- Settings Section -->
+    <!-- ============================================================
+         SETTINGS SECTION
+         ============================================================ -->
     <section id="settings-section" class="section hidden">
       <h2>API Settings</h2>
       <div class="form-group">
@@ -40,7 +42,9 @@
       <p id="settings-status" class="status-msg"></p>
     </section>
 
-    <!-- Main Section -->
+    <!-- ============================================================
+         MAIN SECTION (no active workflow)
+         ============================================================ -->
     <section id="main-section" class="section">
       <div class="status-bar">
         <span id="page-status" class="status-indicator">Not on Seller Central</span>
@@ -50,7 +54,7 @@
       <!-- Customer Message Input -->
       <div class="form-group">
         <label for="customer-message">Customer Message</label>
-        <textarea id="customer-message" rows="5" placeholder="Paste the customer's message here, or it will be auto-detected on Seller Central messaging pages..."></textarea>
+        <textarea id="customer-message" rows="4" placeholder="Paste the customer's message here, or auto-detected on SC messaging pages..."></textarea>
       </div>
 
       <!-- AI Response Generator -->
@@ -59,7 +63,7 @@
         <div class="ai-actions">
           <button id="generate-btn" class="btn btn-primary btn-full">Generate AI Response</button>
         </div>
-        <textarea id="ai-response" rows="6" placeholder="AI-generated response will appear here..."></textarea>
+        <textarea id="ai-response" rows="5" placeholder="AI-generated response will appear here..."></textarea>
         <div class="btn-row">
           <button id="copy-btn" class="btn btn-secondary" disabled>Copy</button>
           <button id="insert-btn" class="btn btn-secondary" disabled>Insert into Reply</button>
@@ -67,15 +71,16 @@
         </div>
       </div>
 
-      <!-- Quick Actions -->
+      <!-- Workflow Actions -->
       <div class="quick-actions">
-        <h3>Quick Actions</h3>
+        <h3>Guided Workflows</h3>
+        <p class="workflow-desc">Step-by-step: compose email, send it, then process the action. You click Send and Confirm.</p>
         <div class="action-grid">
-          <button id="refund-btn" class="btn btn-action btn-refund">
+          <button id="start-refund-workflow" class="btn btn-action btn-refund">
             <span class="action-icon">&#8634;</span>
             <span>Process Refund</span>
           </button>
-          <button id="replacement-btn" class="btn btn-action btn-replacement">
+          <button id="start-replacement-workflow" class="btn btn-action btn-replacement">
             <span class="action-icon">&#9998;</span>
             <span>Send Replacement</span>
           </button>
@@ -94,72 +99,109 @@
       </div>
     </section>
 
-    <!-- Refund Modal -->
-    <section id="refund-section" class="section hidden">
-      <h2>Process Refund</h2>
-      <div class="form-group">
-        <label for="refund-order-id">Order ID</label>
-        <input type="text" id="refund-order-id" placeholder="e.g. 114-1234567-1234567" />
-      </div>
-      <div class="form-group">
-        <label for="refund-amount">Refund Amount ($)</label>
-        <input type="number" id="refund-amount" step="0.01" placeholder="0.00" />
-      </div>
-      <div class="form-group">
-        <label for="refund-reason">Reason</label>
-        <select id="refund-reason">
-          <option value="customer_request">Customer Request</option>
-          <option value="damaged">Item Damaged</option>
-          <option value="wrong_item">Wrong Item Sent</option>
-          <option value="not_received">Not Received</option>
-          <option value="defective">Defective Product</option>
-          <option value="other">Other</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>
-          <input type="checkbox" id="refund-notify" checked />
-          Send confirmation message to customer
-        </label>
-      </div>
-      <div class="btn-row">
-        <button id="process-refund-btn" class="btn btn-primary">Open Refund Page</button>
-        <button id="refund-generate-msg-btn" class="btn btn-secondary">Generate Refund Message</button>
-        <button class="btn btn-outline back-to-main">Cancel</button>
-      </div>
-    </section>
+    <!-- ============================================================
+         WORKFLOW: ACTIVE (shows progress + current step)
+         ============================================================ -->
+    <section id="workflow-section" class="section hidden">
+      <!-- Progress bar -->
+      <div class="wf-progress" id="wf-progress"></div>
 
-    <!-- Replacement Modal -->
-    <section id="replacement-section" class="section hidden">
-      <h2>Send Replacement</h2>
-      <div class="form-group">
-        <label for="replacement-order-id">Order ID</label>
-        <input type="text" id="replacement-order-id" placeholder="e.g. 114-1234567-1234567" />
+      <!-- Step: Gather Info (Refund) -->
+      <div id="wf-step-gather-refund" class="wf-step hidden">
+        <h2>Step 1: Refund Details</h2>
+        <div class="form-group">
+          <label for="wf-refund-order-id">Order ID</label>
+          <input type="text" id="wf-refund-order-id" placeholder="e.g. 114-1234567-1234567" />
+        </div>
+        <div class="form-group">
+          <label for="wf-refund-amount">Refund Amount ($)</label>
+          <input type="number" id="wf-refund-amount" step="0.01" placeholder="0.00" />
+        </div>
+        <div class="form-group">
+          <label for="wf-refund-reason">Reason</label>
+          <select id="wf-refund-reason">
+            <option value="customer_request">Customer Request</option>
+            <option value="damaged">Item Damaged</option>
+            <option value="wrong_item">Wrong Item Sent</option>
+            <option value="not_received">Not Received</option>
+            <option value="defective">Defective Product</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="btn-row">
+          <button id="wf-refund-next" class="btn btn-primary">Next: Compose Email</button>
+          <button class="btn btn-outline wf-cancel">Cancel</button>
+        </div>
       </div>
-      <div class="form-group">
-        <label for="replacement-asin">Product ASIN</label>
-        <input type="text" id="replacement-asin" placeholder="e.g. B0XXXXXXXX" />
+
+      <!-- Step: Gather Info (Replacement) -->
+      <div id="wf-step-gather-replacement" class="wf-step hidden">
+        <h2>Step 1: Replacement Details</h2>
+        <div class="form-group">
+          <label for="wf-replace-order-id">Order ID</label>
+          <input type="text" id="wf-replace-order-id" placeholder="e.g. 114-1234567-1234567" />
+        </div>
+        <div class="form-group">
+          <label for="wf-replace-asin">Product ASIN (optional)</label>
+          <input type="text" id="wf-replace-asin" placeholder="e.g. B0XXXXXXXX" />
+        </div>
+        <div class="form-group">
+          <label for="wf-replace-reason">Reason</label>
+          <select id="wf-replace-reason">
+            <option value="damaged">Item Damaged in Transit</option>
+            <option value="defective">Defective Product</option>
+            <option value="wrong_item">Wrong Item Sent</option>
+            <option value="missing_parts">Missing Parts</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="btn-row">
+          <button id="wf-replace-next" class="btn btn-primary">Next: Compose Email</button>
+          <button class="btn btn-outline wf-cancel">Cancel</button>
+        </div>
       </div>
-      <div class="form-group">
-        <label for="replacement-reason">Reason</label>
-        <select id="replacement-reason">
-          <option value="damaged">Item Damaged in Transit</option>
-          <option value="defective">Defective Product</option>
-          <option value="wrong_item">Wrong Item Sent</option>
-          <option value="missing_parts">Missing Parts</option>
-          <option value="other">Other</option>
-        </select>
+
+      <!-- Step: Compose Email -->
+      <div id="wf-step-compose" class="wf-step hidden">
+        <h2 id="wf-compose-title">Step 2: Compose Customer Email</h2>
+        <p class="step-hint">Review and edit the message below. Then click the button to fill the reply box on the messaging page.</p>
+        <div class="form-group">
+          <textarea id="wf-email-body" rows="8" placeholder="Generating email..."></textarea>
+        </div>
+        <div class="btn-row">
+          <button id="wf-compose-ai" class="btn btn-outline">Regenerate with AI</button>
+        </div>
+        <div class="btn-row" style="margin-top:8px;">
+          <button id="wf-compose-fill" class="btn btn-primary btn-full">Fill Reply & Continue</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-outline wf-cancel">Cancel Workflow</button>
+        </div>
       </div>
-      <div class="form-group">
-        <label>
-          <input type="checkbox" id="replacement-notify" checked />
-          Send confirmation message to customer
-        </label>
+
+      <!-- Step: Waiting for user action on page -->
+      <div id="wf-step-page-action" class="wf-step hidden">
+        <h2 id="wf-page-title">Waiting...</h2>
+        <div class="page-action-card">
+          <div class="page-action-icon">&#9758;</div>
+          <p id="wf-page-desc">Complete the action on the Seller Central page, then come back here.</p>
+        </div>
+        <div class="btn-row">
+          <button id="wf-skip-step" class="btn btn-outline">Skip This Step</button>
+          <button class="btn btn-outline wf-cancel">Cancel Workflow</button>
+        </div>
       </div>
-      <div class="btn-row">
-        <button id="process-replacement-btn" class="btn btn-primary">Open Replacement Page</button>
-        <button id="replacement-generate-msg-btn" class="btn btn-secondary">Generate Message</button>
-        <button class="btn btn-outline back-to-main">Cancel</button>
+
+      <!-- Step: Complete -->
+      <div id="wf-step-complete" class="wf-step hidden">
+        <div class="complete-card">
+          <div class="complete-icon">&#10003;</div>
+          <h2 id="wf-complete-title">Workflow Complete!</h2>
+          <p id="wf-complete-desc">The process has been completed successfully.</p>
+        </div>
+        <div class="btn-row">
+          <button id="wf-done" class="btn btn-primary btn-full">Done</button>
+        </div>
       </div>
     </section>
   </div>

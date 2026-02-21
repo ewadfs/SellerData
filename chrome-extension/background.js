@@ -1,11 +1,14 @@
 /**
  * Background service worker for SellerData Chrome Extension.
- * Handles AI message generation via OpenAI API.
+ * Orchestrates workflows and handles AI message generation.
  */
 
-/**
- * Generate an AI response to a customer message using OpenAI.
- */
+importScripts('lib/utils.js');
+
+// ============================================================
+// AI MESSAGE GENERATION
+// ============================================================
+
 async function generateAIResponse(apiKey, customerMessage, tone, sellerName, context) {
   const systemPrompt = `You are a customer service assistant for "${sellerName}", an Amazon seller.
 Generate a response to the customer's message below.
@@ -47,32 +50,173 @@ ${context ? `\nAdditional context: ${context}` : ''}`;
   return data.choices[0].message.content.trim();
 }
 
-// Listen for messages from popup and content scripts
-chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+// ============================================================
+// WORKFLOW ORCHESTRATION
+// ============================================================
+
+/**
+ * Execute automatic workflow steps (like navigation).
+ * Called when a step with location='auto' is reached.
+ */
+async function executeAutoStep(workflow, stepDef) {
+  if (stepDef.action === 'navigateToOrder') {
+    const orderId = workflow.data.orderId;
+    const baseUrl = workflow.data.baseUrl || 'https://sellercentral.amazon.com';
+    const url = `${baseUrl}/orders-v3/order/${orderId}`;
+
+    // Navigate the current tab to the order page
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab) {
+      await chrome.tabs.update(tab.id, { url });
+    }
+
+    // Advance to next step (the content script will pick it up on the order page)
+    return await advanceWorkflow();
+  }
+  return workflow;
+}
+
+/**
+ * When a tab finishes loading, check if there's a workflow step waiting
+ * for this page type and tell the content script to execute it.
+ */
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status !== 'complete') return;
+
+  const workflow = await getActiveWorkflow();
+  if (!workflow) return;
+
+  const stepDef = getCurrentStepDef(workflow);
+  if (!stepDef || stepDef.location !== 'page') return;
+
+  const pageType = detectPageType(tab.url);
+
+  // If we're on the right type of page for this step, execute the action
+  if (pageType === stepDef.pageType) {
+    // Give the page a moment to fully render
+    setTimeout(() => {
+      chrome.tabs.sendMessage(tabId, {
+        action: 'executeWorkflowStep',
+        workflow,
+        stepDef
+      }).catch(() => {
+        // Content script may not be ready yet
+      });
+    }, 1000);
+  }
+});
+
+// ============================================================
+// MESSAGE HANDLER
+// ============================================================
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+
+  // --- AI generation ---
   if (request.action === 'generateResponse') {
     const { apiKey, customerMessage, tone, sellerName, context } = request;
-
     generateAIResponse(apiKey, customerMessage, tone, sellerName, context)
       .then((response) => sendResponse({ success: true, response }))
       .catch((error) => sendResponse({ success: false, error: error.message }));
-
-    // Return true to indicate async response
     return true;
   }
 
-  if (request.action === 'openRefundPage') {
-    const orderId = request.orderId || '';
-    const url = `https://sellercentral.amazon.com/orders-v3/order/${orderId}`;
-    chrome.tabs.create({ url });
-    sendResponse({ success: true });
-    return false;
+  // --- Start a new workflow ---
+  if (request.action === 'startWorkflow') {
+    const { type, data } = request;
+    const workflow = {
+      type,
+      currentStep: 0,
+      data,
+      startedAt: Date.now()
+    };
+    setActiveWorkflow(workflow).then(() => {
+      sendResponse({ success: true, workflow });
+    });
+    return true;
   }
 
-  if (request.action === 'openReplacementPage') {
-    const orderId = request.orderId || '';
-    const url = `https://sellercentral.amazon.com/orders-v3/order/${orderId}`;
-    chrome.tabs.create({ url });
-    sendResponse({ success: true });
-    return false;
+  // --- Get current workflow state ---
+  if (request.action === 'getWorkflow') {
+    getActiveWorkflow().then((workflow) => {
+      const stepDef = getCurrentStepDef(workflow);
+      sendResponse({ workflow, stepDef });
+    });
+    return true;
+  }
+
+  // --- Advance to next step ---
+  if (request.action === 'advanceWorkflow') {
+    (async () => {
+      let workflow = await advanceWorkflow();
+      if (!workflow) {
+        sendResponse({ workflow: null, stepDef: null, completed: true });
+        return;
+      }
+
+      let stepDef = getCurrentStepDef(workflow);
+
+      // Handle auto steps (like navigation)
+      while (stepDef && stepDef.location === 'auto') {
+        workflow = await executeAutoStep(workflow, stepDef);
+        if (!workflow) {
+          sendResponse({ workflow: null, stepDef: null, completed: true });
+          return;
+        }
+        stepDef = getCurrentStepDef(workflow);
+      }
+
+      sendResponse({ workflow, stepDef, completed: false });
+    })();
+    return true;
+  }
+
+  // --- Update workflow data (e.g., edited email body) ---
+  if (request.action === 'updateWorkflowData') {
+    (async () => {
+      const workflow = await getActiveWorkflow();
+      if (workflow) {
+        Object.assign(workflow.data, request.data);
+        await setActiveWorkflow(workflow);
+        sendResponse({ success: true, workflow });
+      } else {
+        sendResponse({ success: false });
+      }
+    })();
+    return true;
+  }
+
+  // --- Cancel workflow ---
+  if (request.action === 'cancelWorkflow') {
+    clearActiveWorkflow().then(() => {
+      sendResponse({ success: true });
+    });
+    return true;
+  }
+
+  // --- Step completed by content script (user clicked button on page) ---
+  if (request.action === 'stepCompletedOnPage') {
+    (async () => {
+      let workflow = await advanceWorkflow();
+      if (!workflow) {
+        sendResponse({ workflow: null, stepDef: null, completed: true });
+        return;
+      }
+
+      let stepDef = getCurrentStepDef(workflow);
+
+      // Handle auto steps
+      while (stepDef && stepDef.location === 'auto') {
+        workflow = await executeAutoStep(workflow, stepDef);
+        if (!workflow) {
+          sendResponse({ workflow: null, stepDef: null, completed: true });
+          return;
+        }
+        stepDef = getCurrentStepDef(workflow);
+      }
+
+      sendResponse({ workflow, stepDef, completed: false });
+    })();
+    return true;
   }
 });

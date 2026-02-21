@@ -5,7 +5,7 @@
 }
 
 body {
-  width: 400px;
+  width: 420px;
   max-height: 600px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 13px;
@@ -18,7 +18,7 @@ body {
   padding: 16px;
 }
 
-/* Header */
+/* ---- Header ---- */
 .popup-header {
   text-align: center;
   padding-bottom: 12px;
@@ -39,16 +39,11 @@ body {
   letter-spacing: 1px;
 }
 
-/* Sections */
-.section {
-  display: block;
-}
+/* ---- Sections ---- */
+.section { display: block; }
+.section.hidden { display: none; }
 
-.section.hidden {
-  display: none;
-}
-
-/* Status Bar */
+/* ---- Status Bar ---- */
 .status-bar {
   display: flex;
   justify-content: space-between;
@@ -85,10 +80,8 @@ body {
   color: #232f3e;
 }
 
-/* Forms */
-.form-group {
-  margin-bottom: 10px;
-}
+/* ---- Forms ---- */
+.form-group { margin-bottom: 10px; }
 
 .form-group label {
   display: block;
@@ -127,7 +120,7 @@ body {
   min-height: 60px;
 }
 
-/* Buttons */
+/* ---- Buttons ---- */
 .btn {
   padding: 7px 14px;
   border: none;
@@ -171,9 +164,7 @@ body {
   background: #f3f4f6;
 }
 
-.btn-full {
-  width: 100%;
-}
+.btn-full { width: 100%; }
 
 .btn-row {
   display: flex;
@@ -182,11 +173,9 @@ body {
   flex-wrap: wrap;
 }
 
-.ai-actions {
-  margin-bottom: 8px;
-}
+.ai-actions { margin-bottom: 8px; }
 
-/* Quick Actions */
+/* ---- Quick Actions ---- */
 .quick-actions {
   margin-top: 16px;
   padding-top: 12px;
@@ -198,9 +187,16 @@ body {
   font-size: 12px;
   font-weight: 600;
   color: #4b5563;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.workflow-desc {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-bottom: 8px;
+  line-height: 1.3;
 }
 
 .action-grid {
@@ -228,26 +224,18 @@ body {
   color: #92400e;
   border-color: #fbbf24;
 }
-
-.btn-refund:hover {
-  background: #fde68a;
-}
+.btn-refund:hover { background: #fde68a; }
 
 .btn-replacement {
   background: #dbeafe;
   color: #1e40af;
   border-color: #60a5fa;
 }
+.btn-replacement:hover { background: #bfdbfe; }
 
-.btn-replacement:hover {
-  background: #bfdbfe;
-}
+.action-icon { font-size: 20px; }
 
-.action-icon {
-  font-size: 20px;
-}
-
-/* Templates */
+/* ---- Templates ---- */
 .templates-section {
   margin-top: 12px;
   padding-top: 12px;
@@ -277,24 +265,23 @@ body {
   border-color: #ff9900;
 }
 
-/* Section headers */
-#refund-section h2,
-#replacement-section h2,
-#settings-section h2 {
+/* ---- Section headers ---- */
+#settings-section h2,
+.wf-step h2 {
   font-size: 15px;
   font-weight: 700;
   color: #232f3e;
   margin-bottom: 12px;
 }
 
-/* Status message */
+/* ---- Status message ---- */
 .status-msg {
   margin-top: 8px;
   font-size: 11px;
   color: #16a34a;
 }
 
-/* Loading spinner */
+/* ---- Loading spinner ---- */
 .loading {
   position: relative;
   pointer-events: none;
@@ -318,8 +305,126 @@ body {
   to { transform: rotate(360deg); }
 }
 
-/* Checkbox */
+/* ---- Checkbox ---- */
 .form-group label input[type="checkbox"] {
   width: auto;
   margin-right: 6px;
+}
+
+/* ============================================================
+   WORKFLOW UI
+   ============================================================ */
+
+.wf-step { margin-top: 4px; }
+.wf-step.hidden { display: none; }
+
+/* ---- Progress Bar ---- */
+.wf-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin-bottom: 16px;
+  padding: 12px 0;
+  background: #f3f4f6;
+  border-radius: 8px;
+}
+
+.wf-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  background: #e5e7eb;
+  color: #9ca3af;
+  flex-shrink: 0;
+  transition: all 0.3s;
+}
+
+.wf-dot.done {
+  background: #16a34a;
+  color: #fff;
+}
+
+.wf-dot.active {
+  background: #ff9900;
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 153, 0, 0.25);
+  transform: scale(1.1);
+}
+
+.wf-line {
+  width: 16px;
+  height: 2px;
+  background: #d1d5db;
+  flex-shrink: 0;
+}
+
+.wf-line.done {
+  background: #16a34a;
+}
+
+/* ---- Step Hint ---- */
+.step-hint {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+/* ---- Page Action Card ---- */
+.page-action-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fffbeb;
+  border: 1px solid #fbbf24;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 0;
+}
+
+.page-action-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.page-action-card p {
+  font-size: 12px;
+  color: #92400e;
+  line-height: 1.4;
+}
+
+/* ---- Complete Card ---- */
+.complete-card {
+  text-align: center;
+  padding: 20px 12px;
+}
+
+.complete-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #16a34a;
+  font-size: 24px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px;
+}
+
+.complete-card h2 {
+  text-align: center;
+}
+
+.complete-card p {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 4px;
 }
