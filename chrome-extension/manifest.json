@@ -30,8 +30,8 @@
         "https://sellercentral.amazon.de/*",
         "https://sellercentral.amazon.co.jp/*"
       ],
-      "js": ["lib/utils.js", "content.js", "shipment-page.js", "deals-page.js", "home-page.js", "asdn-page.js", "inventory-page.js", "brand-analytics-page.js"],
-      "css": ["content.css", "shipment-page.css", "deals-page.css", "home-page.css", "asdn-page.css", "inventory-page.css", "brand-analytics-page.css"],
+      "js": ["lib/utils.js", "content.js", "shipment-page.js", "deals-page.js", "home-page.js", "asdn-page.js", "inventory-page.js", "brand-analytics-page.js", "case-log-page.js"],
+      "css": ["content.css", "shipment-page.css", "deals-page.css", "home-page.css", "asdn-page.css", "inventory-page.css", "brand-analytics-page.css", "case-log-page.css"],
       "run_at": "document_idle"
     }
   ],

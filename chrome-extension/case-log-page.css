@@ -1,0 +1,301 @@
+/* ============================================================
+   SellerData — Case Log Page Styles
+   Status highlighting, age badges, summary banner, bump UI
+   ============================================================ */
+
+/* ---- Summary Banner ---- */
+
+#sd-case-banner {
+  padding: 16px 20px;
+  margin: 16px auto 12px;
+  max-width: 1200px;
+  background: #fff;
+  border: 1px solid #d5d9d9;
+  border-left: 4px solid #ff9900;
+  border-radius: 8px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.sd-case-banner-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.sd-case-banner-logo {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ff9900;
+}
+
+.sd-case-banner-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #232f3e;
+}
+
+/* ---- Stat Cards ---- */
+
+.sd-case-banner-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.sd-case-stat {
+  flex: 1;
+  min-width: 110px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  text-align: center;
+  border: 1px solid #e5e7eb;
+}
+
+.sd-case-stat-count {
+  display: block;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.sd-case-stat-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+/* Stat card colors */
+.sd-case-stat-seller {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+.sd-case-stat-seller .sd-case-stat-count {
+  color: #dc2626;
+}
+
+.sd-case-stat-amazon {
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+.sd-case-stat-amazon .sd-case-stat-count {
+  color: #d97706;
+}
+
+.sd-case-stat-stale {
+  background: #fff7ed;
+  border-color: #fdba74;
+}
+.sd-case-stat-stale .sd-case-stat-count {
+  color: #ea580c;
+}
+
+.sd-case-stat-open {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+.sd-case-stat-open .sd-case-stat-count {
+  color: #2563eb;
+}
+
+.sd-case-stat-resolved {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+.sd-case-stat-resolved .sd-case-stat-count {
+  color: #16a34a;
+}
+
+/* ---- Alert banner ---- */
+
+.sd-case-banner-alert {
+  padding: 8px 14px;
+  margin-bottom: 12px;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  color: #dc2626;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* ---- Actions row ---- */
+
+.sd-case-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+
+.sd-case-bump-btn {
+  padding: 9px 24px;
+  font-size: 13px;
+  font-weight: 700;
+  border: none;
+  border-radius: 8px;
+  background: #ff9900;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sd-case-bump-btn:hover:not(:disabled) {
+  background: #e88b00;
+}
+
+.sd-case-bump-btn:disabled {
+  background: #d5d9d9;
+  color: #888;
+  cursor: not-allowed;
+}
+
+.sd-case-stale-label {
+  font-size: 12px;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sd-case-stale-input {
+  width: 48px;
+  padding: 4px 6px;
+  font-size: 12px;
+  border: 1px solid #d5d9d9;
+  border-radius: 4px;
+  text-align: center;
+}
+
+/* ---- Progress Bar ---- */
+
+.sd-case-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.sd-case-progress.hidden {
+  display: none;
+}
+
+.sd-case-progress-bar {
+  flex: 1;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.sd-case-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: #ff9900;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.sd-case-progress-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  white-space: nowrap;
+  min-width: 50px;
+  text-align: right;
+}
+
+/* ---- Log ---- */
+
+.sd-case-log {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #fafafa;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.sd-case-log.hidden {
+  display: none;
+}
+
+.sd-case-log-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.sd-case-log-info  { color: #374151; }
+.sd-case-log-ok    { color: #16a34a; }
+.sd-case-log-warn  { color: #d97706; }
+.sd-case-log-error { color: #dc2626; }
+
+/* ============================================================
+   ROW HIGHLIGHTING
+   Applied to table rows / cards in the case list
+   ============================================================ */
+
+/* Seller needs to reply — red left border + light red bg */
+.sd-case-seller-action {
+  background: #fef2f2 !important;
+  border-left: 4px solid #dc2626 !important;
+}
+
+/* Amazon is working on it — light yellow bg */
+.sd-case-amazon-action {
+  background: #fffbeb !important;
+  border-left: 4px solid #f59e0b !important;
+}
+
+/* Resolved / Closed — muted grey */
+.sd-case-resolved {
+  background: #f9fafb !important;
+  border-left: 4px solid #d1d5db !important;
+  opacity: 0.7;
+}
+
+/* Open (ambiguous status) — light blue */
+.sd-case-open {
+  background: #eff6ff !important;
+  border-left: 4px solid #3b82f6 !important;
+}
+
+/* ============================================================
+   AGE BADGES
+   Injected inline into rows
+   ============================================================ */
+
+.sd-case-age-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 10px;
+  background: #e5e7eb;
+  color: #555;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.sd-case-age-aging {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.sd-case-age-stale {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* ---- Generic visibility ---- */
+.hidden {
+  display: none !important;
+}

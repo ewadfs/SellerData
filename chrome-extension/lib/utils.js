@@ -334,6 +334,7 @@ function detectPageType(url) {
   if (/\/asdn\//.test(url)) return 'asdn';
   if (/\/myinventory\/inventory/.test(url) || /\/inventory\?/.test(url)) return 'inventory';
   if (/\/brand-analytics/.test(url)) return 'brand_analytics';
+  if (/\/cu\/case-lobby/.test(url) || /\/case-dashboard\/lobby/.test(url)) return 'case_log';
   if (/sellercentral\.amazon\.[^/]+\/home\b/.test(url) || /sellercentral\.amazon\.[^/]+\/?$/.test(url)) return 'home';
   if (/sellercentral\.amazon\./.test(url)) return 'seller_central';
   return 'unknown';
