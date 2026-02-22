@@ -329,6 +329,7 @@ function detectPageType(url) {
   if (/\/orders-v3\/order\/.*\/replacement/.test(url)) return 'replacement_form';
   if (/\/orders-v3\/order\//.test(url)) return 'order';
   if (/\/gp\/ssof\/shipping-queue/.test(url) || /fbashipment/.test(url)) return 'shipping_queue';
+  if (/\/merchandising-new/.test(url) || /\/deals\/create/.test(url)) return 'deals';
   if (/sellercentral\.amazon\./.test(url)) return 'seller_central';
   return 'unknown';
 }

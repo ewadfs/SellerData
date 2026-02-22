@@ -30,8 +30,8 @@
         "https://sellercentral.amazon.de/*",
         "https://sellercentral.amazon.co.jp/*"
       ],
-      "js": ["lib/utils.js", "content.js", "shipment-page.js"],
-      "css": ["content.css", "shipment-page.css"],
+      "js": ["lib/utils.js", "content.js", "shipment-page.js", "deals-page.js"],
+      "css": ["content.css", "shipment-page.css", "deals-page.css"],
       "run_at": "document_idle"
     }
   ],
