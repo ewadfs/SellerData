@@ -1,0 +1,136 @@
+/* ============================================================
+   SellerData — Removal Orders Page Styles
+   ============================================================ */
+
+#sd-removal-panel {
+  padding: 16px 20px;
+  margin: 16px auto 12px;
+  max-width: 1200px;
+  background: #fff;
+  border: 1px solid #d5d9d9;
+  border-left: 4px solid #ff9900;
+  border-radius: 8px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.sd-removal-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.sd-removal-logo { font-size: 14px; font-weight: 700; color: #ff9900; }
+.sd-removal-title { font-size: 15px; font-weight: 700; color: #232f3e; }
+
+/* Stats */
+.sd-removal-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.sd-removal-stat {
+  flex: 1;
+  min-width: 100px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  text-align: center;
+  border: 1px solid #e5e7eb;
+}
+
+.sd-removal-stat-count { display: block; font-size: 22px; font-weight: 800; line-height: 1.2; }
+.sd-removal-stat-label { display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-top: 2px; }
+
+.sd-removal-stat-progress { background: #eff6ff; border-color: #93c5fd; }
+.sd-removal-stat-progress .sd-removal-stat-count { color: #2563eb; }
+
+.sd-removal-stat-units { background: #fffbeb; border-color: #fcd34d; }
+.sd-removal-stat-units .sd-removal-stat-count { color: #d97706; }
+
+.sd-removal-stat-stuck { background: #fef2f2; border-color: #fca5a5; }
+.sd-removal-stat-stuck .sd-removal-stat-count { color: #dc2626; }
+
+.sd-removal-stat-stuck-units { background: #fff7ed; border-color: #fdba74; }
+.sd-removal-stat-stuck-units .sd-removal-stat-count { color: #ea580c; }
+
+.sd-removal-stat-completed { background: #f0fdf4; border-color: #86efac; }
+.sd-removal-stat-completed .sd-removal-stat-count { color: #16a34a; }
+
+/* Stuck rows */
+.sd-removal-stuck {
+  border-left: 4px solid #dc2626 !important;
+  background: #fef2f2 !important;
+}
+
+/* Stuck section */
+.sd-removal-stuck-section { margin-bottom: 10px; }
+
+.sd-removal-stuck-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #dc2626;
+  margin-bottom: 8px;
+}
+
+.sd-removal-stuck-list {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.sd-removal-stuck-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.sd-removal-stuck-item:last-child { border-bottom: none; }
+
+.sd-removal-stuck-id { font-weight: 700; color: #232f3e; min-width: 120px; }
+.sd-removal-stuck-asin { color: #2563eb; min-width: 100px; }
+.sd-removal-stuck-qty { font-weight: 600; color: #dc2626; }
+.sd-removal-stuck-age { color: #ea580c; font-weight: 600; }
+.sd-removal-stuck-status { color: #6b7280; font-style: italic; }
+
+.sd-removal-all-good {
+  padding: 12px;
+  font-size: 12px;
+  color: #16a34a;
+  background: #f0fdf4;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+/* Actions */
+.sd-removal-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sd-removal-claim-btn {
+  padding: 9px 24px;
+  font-size: 13px;
+  font-weight: 700;
+  border: none;
+  border-radius: 8px;
+  background: #ff9900;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sd-removal-claim-btn:hover { background: #e88b00; }
+
+.sd-removal-claim-note {
+  font-size: 12px;
+  color: #16a34a;
+  font-weight: 600;
+}

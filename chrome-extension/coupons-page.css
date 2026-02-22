@@ -1,0 +1,114 @@
+/* ============================================================
+   SellerData — Coupons & Promotions Page Styles
+   ============================================================ */
+
+#sd-coupons-panel {
+  padding: 16px 20px;
+  margin: 16px auto 12px;
+  max-width: 1200px;
+  background: #fff;
+  border: 1px solid #d5d9d9;
+  border-left: 4px solid #ff9900;
+  border-radius: 8px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.sd-coupon-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.sd-coupon-logo { font-size: 14px; font-weight: 700; color: #ff9900; }
+.sd-coupon-title { font-size: 15px; font-weight: 700; color: #232f3e; }
+
+/* Stats */
+.sd-coupon-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.sd-coupon-stat {
+  flex: 1;
+  min-width: 100px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  text-align: center;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.sd-coupon-stat-count { display: block; font-size: 18px; font-weight: 800; color: #232f3e; line-height: 1.2; }
+.sd-coupon-stat-label { display: block; font-size: 10px; font-weight: 600; color: #6b7280; margin-top: 2px; }
+
+/* Performance summary */
+.sd-coupon-perf-summary {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.sd-coupon-perf-item {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 12px;
+}
+
+.sd-coupon-perf-good { background: #dcfce7; color: #166534; }
+.sd-coupon-perf-bad { background: #fee2e2; color: #991b1b; }
+
+/* Row highlighting */
+.sd-coupon-winning  { border-left: 4px solid #16a34a !important; background: #f0fdf4 !important; }
+.sd-coupon-moderate { border-left: 4px solid #f59e0b !important; background: #fffbeb !important; }
+.sd-coupon-losing   { border-left: 4px solid #dc2626 !important; background: #fef2f2 !important; }
+.sd-coupon-neutral  { border-left: 4px solid #d1d5db !important; }
+
+/* Actions */
+.sd-coupon-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.sd-coupon-pause-btn {
+  padding: 9px 24px;
+  font-size: 13px;
+  font-weight: 700;
+  border: none;
+  border-radius: 8px;
+  background: #dc2626;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sd-coupon-pause-btn:hover:not(:disabled) { background: #b91c1c; }
+.sd-coupon-pause-btn:disabled { background: #d5d9d9; color: #888; cursor: not-allowed; }
+
+.sd-coupon-action-note { font-size: 11px; color: #6b7280; }
+
+/* Log */
+.sd-coupon-log {
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #fafafa;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.sd-coupon-log.hidden { display: none; }
+.sd-coupon-log-line { white-space: pre-wrap; word-break: break-word; }
+.sd-coupon-log-info  { color: #374151; }
+.sd-coupon-log-ok    { color: #16a34a; }
+.sd-coupon-log-warn  { color: #d97706; }
+.sd-coupon-log-error { color: #dc2626; }

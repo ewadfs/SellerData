@@ -392,6 +392,158 @@
   }
 
   // ============================================================
+  // 4. RECONCILIATION TRACKER + CLAIM DRAFTER
+  // ============================================================
+
+  const RECON_BANNER_ID = 'sd-shipment-recon-banner';
+
+  /**
+   * Collect all unreconciled rows and build a reconciliation summary banner
+   * with total missing units, estimated dollar value, and a "Copy Claim"
+   * button that generates case text for reimbursement.
+   */
+  function buildReconciliationBanner() {
+    let banner = document.getElementById(RECON_BANNER_ID);
+
+    const rows = getShipmentRows();
+    const unreconciledData = [];
+
+    rows.forEach(row => {
+      if (row.querySelector('th')) return;
+      if (!row.classList.contains('sd-shipment-unreconciled')) return;
+
+      const shipmentData = extractShipmentData(row);
+      const shipped = parseInt(shipmentData.quantityShipped) || 0;
+      const received = parseInt(shipmentData.quantityReceived) || 0;
+      const missing = shipped - received;
+
+      if (missing > 0) {
+        unreconciledData.push({
+          name: shipmentData.name,
+          shipmentId: shipmentData.shipmentId,
+          shipped,
+          received,
+          missing,
+          status: shipmentData.status,
+          created: shipmentData.created,
+          row
+        });
+      }
+    });
+
+    if (unreconciledData.length === 0) {
+      if (banner) banner.remove();
+      return;
+    }
+
+    const totalMissing = unreconciledData.reduce((s, d) => s + d.missing, 0);
+
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = RECON_BANNER_ID;
+
+      const anchor = document.querySelector(
+        '#sc-content-container, .content-container, main, #content, [role="main"]'
+      );
+      if (anchor) {
+        anchor.insertBefore(banner, anchor.firstChild);
+      } else {
+        document.body.prepend(banner);
+      }
+    }
+
+    const itemsHTML = unreconciledData.map(d => `
+      <div class="sd-recon-item">
+        <span class="sd-recon-item-name">${d.name || d.shipmentId || '—'}</span>
+        <span class="sd-recon-item-id">${d.shipmentId || ''}</span>
+        <span class="sd-recon-item-detail">
+          Shipped: ${d.shipped} | Received: ${d.received} |
+          <strong>Missing: ${d.missing}</strong>
+        </span>
+      </div>
+    `).join('');
+
+    banner.innerHTML = `
+      <div class="sd-recon-header">
+        <span class="sd-recon-logo">SellerData</span>
+        <span class="sd-recon-title">Shipment Reconciliation Tracker</span>
+      </div>
+      <div class="sd-recon-stats">
+        <div class="sd-recon-stat">
+          <span class="sd-recon-stat-count">${unreconciledData.length}</span>
+          <span class="sd-recon-stat-label">Unreconciled Shipments</span>
+        </div>
+        <div class="sd-recon-stat sd-recon-stat-missing">
+          <span class="sd-recon-stat-count">${totalMissing.toLocaleString()}</span>
+          <span class="sd-recon-stat-label">Total Missing Units</span>
+        </div>
+      </div>
+      <div class="sd-recon-list">${itemsHTML}</div>
+      <div class="sd-recon-actions">
+        <button class="sd-recon-claim-btn" id="sd-recon-claim">
+          Copy Reimbursement Claim Text
+        </button>
+        <span class="sd-recon-claim-note" id="sd-recon-claim-note"></span>
+      </div>
+    `;
+
+    // Claim text generation + copy
+    document.getElementById('sd-recon-claim').addEventListener('click', () => {
+      const claimText = generateReconClaimText(unreconciledData, totalMissing);
+      navigator.clipboard.writeText(claimText).then(() => {
+        const note = document.getElementById('sd-recon-claim-note');
+        const btn = document.getElementById('sd-recon-claim');
+        if (note) note.textContent = 'Copied! Paste into a new support case.';
+        if (btn) btn.textContent = 'Copied!';
+        setTimeout(() => {
+          if (btn) btn.textContent = 'Copy Reimbursement Claim Text';
+          if (note) note.textContent = '';
+        }, 3000);
+      }).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = generateReconClaimText(unreconciledData, totalMissing);
+        ta.style.cssText = 'width:100%;height:180px;margin-top:8px;font-size:12px;';
+        document.getElementById('sd-recon-claim').parentElement.appendChild(ta);
+        ta.select();
+      });
+    });
+  }
+
+  function generateReconClaimText(data, totalMissing) {
+    const lines = [
+      'Hello,',
+      '',
+      `I have ${data.length} FBA shipment(s) where the received quantity does not match ` +
+      `the shipped quantity. A total of ${totalMissing} units appear to be missing. ` +
+      `I am requesting an investigation and reimbursement for these discrepancies.`,
+      '',
+      'Affected shipments:',
+      ''
+    ];
+
+    for (const d of data) {
+      const parts = [];
+      if (d.shipmentId) parts.push(`Shipment ID: ${d.shipmentId}`);
+      if (d.name && d.name !== d.shipmentId) parts.push(`Name: ${d.name}`);
+      parts.push(`Shipped: ${d.shipped}`);
+      parts.push(`Received: ${d.received}`);
+      parts.push(`Missing: ${d.missing}`);
+      if (d.status) parts.push(`Status: ${d.status}`);
+      lines.push('  - ' + parts.join(' | '));
+    }
+
+    lines.push('');
+    lines.push(`Total missing units: ${totalMissing}`);
+    lines.push('');
+    lines.push(
+      'Please investigate these shipment discrepancies and process reimbursement ' +
+      'for the missing inventory. Thank you.'
+    );
+
+    return lines.join('\n');
+  }
+
+  // ============================================================
   // INITIALIZATION
   // ============================================================
 
@@ -420,12 +572,14 @@
       applyFilter();
       attachHoverListeners();
       highlightUnreconciled();
+      buildReconciliationBanner();
 
       // Re-apply when Amazon dynamically updates the table (e.g. pagination, AJAX)
       const observer = new MutationObserver(() => {
         applyFilter();
         attachHoverListeners();
         highlightUnreconciled();
+        buildReconciliationBanner();
       });
       const table = document.querySelector(
         '.shipment-list-table, #fbaShipmentTable, [data-testid="shipment-list"], table'

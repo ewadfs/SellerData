@@ -335,6 +335,9 @@ function detectPageType(url) {
   if (/\/myinventory\/inventory/.test(url) || /\/inventory\?/.test(url)) return 'inventory';
   if (/\/brand-analytics/.test(url)) return 'brand_analytics';
   if (/\/cu\/case-lobby/.test(url) || /\/case-dashboard\/lobby/.test(url)) return 'case_log';
+  if (/\/experiments/.test(url)) return 'experiments';
+  if (/\/coupons/.test(url) || /\/promotions/.test(url)) return 'coupons';
+  if (/\/removal-order/.test(url) || /\/recoveries/.test(url)) return 'removal_orders';
   if (/sellercentral\.amazon\.[^/]+\/home\b/.test(url) || /sellercentral\.amazon\.[^/]+\/?$/.test(url)) return 'home';
   if (/sellercentral\.amazon\./.test(url)) return 'seller_central';
   return 'unknown';
