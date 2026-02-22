@@ -1,0 +1,279 @@
+/* ============================================================
+   SellerData — Home Page Disburse Panel Styles
+   ============================================================ */
+
+/* ---- Panel Container ---- */
+
+#sd-disburse-panel {
+  padding: 16px 20px;
+  margin: 16px auto 12px;
+  max-width: 900px;
+  background: #fff;
+  border: 1px solid #d5d9d9;
+  border-left: 4px solid #ff9900;
+  border-radius: 8px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ---- Header ---- */
+
+.sd-disburse-header {
+  margin-bottom: 14px;
+}
+
+.sd-disburse-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.sd-disburse-logo {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ff9900;
+}
+
+.sd-disburse-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #232f3e;
+  flex: 1;
+}
+
+.sd-disburse-collapse-btn {
+  background: none;
+  border: 1px solid #d5d9d9;
+  border-radius: 4px;
+  width: 26px;
+  height: 26px;
+  font-size: 16px;
+  color: #6b7280;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.sd-disburse-collapse-btn:hover {
+  background: #f0f2f2;
+  color: #232f3e;
+}
+
+.sd-disburse-desc {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* ---- Body (collapsible) ---- */
+
+.sd-disburse-collapsed {
+  display: none;
+}
+
+/* ---- Marketplace List ---- */
+
+.sd-disburse-mp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.sd-disburse-mp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background 0.15s;
+}
+
+.sd-disburse-mp-row:last-child {
+  border-bottom: none;
+}
+
+.sd-disburse-mp-row:hover {
+  background: #fafafa;
+}
+
+.sd-disburse-mp-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sd-disburse-mp-flag {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.sd-disburse-mp-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #232f3e;
+}
+
+.sd-disburse-mp-current {
+  font-size: 11px;
+  font-weight: 500;
+  color: #6b7280;
+  background: #f0f2f2;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* ---- Marketplace Actions ---- */
+
+.sd-disburse-mp-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sd-disburse-mp-status {
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 80px;
+  text-align: right;
+}
+
+.sd-disburse-status-opening {
+  color: #d97706;
+}
+
+.sd-disburse-status-success {
+  color: #16a34a;
+}
+
+.sd-disburse-status-unavailable {
+  color: #9ca3af;
+}
+
+.sd-disburse-status-error {
+  color: #dc2626;
+}
+
+.sd-disburse-mp-btn {
+  display: inline-block;
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  border: none;
+  border-radius: 6px;
+  background: #232f3e;
+  color: #fff;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  text-align: center;
+  min-width: 72px;
+}
+
+.sd-disburse-mp-btn:hover {
+  background: #374151;
+  color: #fff;
+  text-decoration: none;
+}
+
+/* ---- Disburse All Button ---- */
+
+.sd-disburse-all-section {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e5e7eb;
+  text-align: center;
+}
+
+.sd-disburse-all-btn {
+  padding: 10px 32px;
+  font-size: 14px;
+  font-weight: 700;
+  border: none;
+  border-radius: 8px;
+  background: #ff9900;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  letter-spacing: 0.01em;
+}
+
+.sd-disburse-all-btn:hover:not(:disabled) {
+  background: #e88b00;
+}
+
+.sd-disburse-all-btn:disabled {
+  background: #d5d9d9;
+  color: #888;
+  cursor: not-allowed;
+}
+
+/* ---- Log ---- */
+
+.sd-disburse-log {
+  margin-top: 12px;
+  max-height: 120px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #fafafa;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #374151;
+}
+
+.sd-disburse-log.hidden {
+  display: none;
+}
+
+.sd-disburse-log-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ============================================================
+   Payments Dashboard Auto-Transfer Status Banner
+   ============================================================ */
+
+.sd-disburse-page-status {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100002;
+  padding: 10px 20px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.sd-disburse-page-status-info {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-bottom: 2px solid #3b82f6;
+}
+
+.sd-disburse-page-status-success {
+  background: #ecfdf5;
+  color: #16a34a;
+  border-bottom: 2px solid #22c55e;
+}
+
+.sd-disburse-page-status-warn {
+  background: #fefce8;
+  color: #a16207;
+  border-bottom: 2px solid #eab308;
+}
+
+.sd-disburse-page-status-error {
+  background: #fef2f2;
+  color: #dc2626;
+  border-bottom: 2px solid #ef4444;
+}

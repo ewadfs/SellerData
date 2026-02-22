@@ -330,6 +330,8 @@ function detectPageType(url) {
   if (/\/orders-v3\/order\//.test(url)) return 'order';
   if (/\/gp\/ssof\/shipping-queue/.test(url) || /fbashipment/.test(url)) return 'shipping_queue';
   if (/\/merchandising-new/.test(url) || /\/deals\/create/.test(url)) return 'deals';
+  if (/\/payments\/dashboard/.test(url) || /\/payments\/event\/view/.test(url)) return 'payments_dashboard';
+  if (/sellercentral\.amazon\.[^/]+\/home\b/.test(url) || /sellercentral\.amazon\.[^/]+\/?$/.test(url)) return 'home';
   if (/sellercentral\.amazon\./.test(url)) return 'seller_central';
   return 'unknown';
 }
