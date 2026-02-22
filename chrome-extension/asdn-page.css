@@ -1,0 +1,155 @@
+/* ============================================================
+   SellerData — ASDN Order History Page Styles
+   Failed shipment highlighting
+   ============================================================ */
+
+/* ---- Failed Shipment Row Highlight ---- */
+
+.sd-asdn-failed {
+  background-color: #fee2e2 !important;
+}
+
+.sd-asdn-failed:hover {
+  background-color: #fecaca !important;
+}
+
+.sd-asdn-failed td,
+.sd-asdn-failed > div {
+  background-color: transparent !important;
+}
+
+/* Flash animation when scrolling to a failed row via the banner */
+
+.sd-asdn-failed-flash {
+  animation: sd-asdn-flash 0.5s ease-in-out 3;
+}
+
+@keyframes sd-asdn-flash {
+  0%, 100% { background-color: #fee2e2; }
+  50%      { background-color: #fca5a5; }
+}
+
+/* ============================================================
+   Failed Shipments Summary Banner
+   ============================================================ */
+
+#sd-asdn-failed-banner {
+  margin: 16px auto 12px;
+  max-width: 1200px;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-left: 4px solid #dc2626;
+  border-radius: 8px;
+  padding: 14px 18px;
+  box-shadow: 0 1px 6px rgba(220, 38, 38, 0.1);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ---- Banner Header ---- */
+
+.sd-asdn-failed-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.sd-asdn-failed-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #dc2626;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.sd-asdn-failed-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #991b1b;
+}
+
+.sd-asdn-failed-subtitle {
+  font-size: 12px;
+  font-weight: 500;
+  color: #b91c1c;
+}
+
+/* ---- Failed Shipment List ---- */
+
+.sd-asdn-failed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.sd-asdn-failed-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #fecaca;
+  transition: background 0.15s;
+}
+
+.sd-asdn-failed-item:last-child {
+  border-bottom: none;
+}
+
+.sd-asdn-failed-item:hover {
+  background: #fee2e2;
+}
+
+.sd-asdn-failed-item-status {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: #dc2626;
+  border-radius: 4px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  min-width: 60px;
+  text-align: center;
+}
+
+.sd-asdn-failed-item-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sd-asdn-failed-item-date {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.sd-asdn-failed-item-goto {
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid #dc2626;
+  border-radius: 4px;
+  background: #fff;
+  color: #dc2626;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.sd-asdn-failed-item-goto:hover {
+  background: #dc2626;
+  color: #fff;
+}
