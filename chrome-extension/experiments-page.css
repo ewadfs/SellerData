@@ -1,5 +1,5 @@
 /* ============================================================
-   SellerData — Experiments Page Styles
+   SellerData — Change Impact Tracker Styles
    ============================================================ */
 
 #sd-exp-panel {
@@ -18,11 +18,18 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 4px;
 }
 
 .sd-exp-logo { font-size: 14px; font-weight: 700; color: #ff9900; }
 .sd-exp-title { font-size: 15px; font-weight: 700; color: #232f3e; }
+
+.sd-exp-desc {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
 
 /* Stat cards */
 .sd-exp-stats {
@@ -56,26 +63,8 @@
 .sd-exp-stat-draft { background: #f9fafb; border-color: #d1d5db; }
 .sd-exp-stat-draft .sd-exp-stat-count { color: #6b7280; }
 
-/* Row highlighting */
-.sd-exp-running   { border-left: 4px solid #3b82f6 !important; background: #eff6ff !important; }
-.sd-exp-completed { border-left: 4px solid #16a34a !important; }
-.sd-exp-needs-review { border-left: 4px solid #ea580c !important; background: #fff7ed !important; }
-.sd-exp-draft { opacity: 0.7; }
-
-.sd-exp-winner-badge {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 2px 8px;
-  font-size: 10px;
-  font-weight: 700;
-  border-radius: 10px;
-  background: #dcfce7;
-  color: #166534;
-  white-space: nowrap;
-}
-
-/* Suggestions section */
-.sd-exp-suggestions-section { margin-top: 4px; }
+/* Tests section */
+.sd-exp-tests-section { margin-top: 4px; }
 
 .sd-exp-suggestions-title {
   font-size: 14px;
@@ -97,22 +86,25 @@
   font-size: 12px;
   background: #f9fafb;
   border-radius: 6px;
+  line-height: 1.6;
 }
 
+/* Individual test card */
 .sd-exp-suggestion {
-  padding: 10px 12px;
-  margin-bottom: 8px;
-  border: 1px solid #fcd34d;
-  border-left: 4px solid #f59e0b;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  border: 1px solid #e5e7eb;
+  border-left: 4px solid #d1d5db;
   border-radius: 6px;
-  background: #fffbeb;
+  background: #fafafa;
 }
 
 .sd-exp-suggestion-header {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
 }
 
 .sd-exp-suggestion-sku {
@@ -130,29 +122,95 @@
   color: #fff;
 }
 
-.sd-exp-suggestion-count {
+.sd-exp-suggestion-date {
   font-size: 11px;
-  color: #92400e;
-  font-weight: 600;
+  color: #9ca3af;
 }
 
 .sd-exp-suggestion-detail {
   font-size: 11px;
   color: #555;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
 }
 
 .sd-exp-old-val { color: #dc2626; text-decoration: line-through; }
 .sd-exp-new-val { color: #16a34a; font-weight: 600; }
 
-.sd-exp-suggestion-date {
+/* Verdict badge */
+.sd-exp-verdict {
+  margin-left: auto;
+  padding: 2px 10px;
   font-size: 10px;
-  color: #9ca3af;
-  margin-left: 4px;
+  font-weight: 700;
+  border-radius: 10px;
+  white-space: nowrap;
 }
 
-.sd-exp-suggestion-tip {
+.sd-exp-verdict-positive { background: #dcfce7; color: #166534; }
+.sd-exp-verdict-negative { background: #fee2e2; color: #991b1b; }
+.sd-exp-verdict-neutral  { background: #f3f4f6; color: #6b7280; }
+.sd-exp-verdict-pending  { background: #eff6ff; color: #2563eb; }
+
+/* Metric comparison table */
+.sd-exp-metric-table {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.sd-exp-metric-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
   font-size: 11px;
-  color: #6b7280;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.sd-exp-metric-row:last-child { border-bottom: none; }
+
+.sd-exp-metric-name { min-width: 110px; font-weight: 600; color: #374151; }
+.sd-exp-metric-before { min-width: 80px; color: #6b7280; }
+.sd-exp-metric-before small, .sd-exp-metric-after small { color: #9ca3af; font-size: 9px; }
+.sd-exp-metric-arrow { color: #9ca3af; }
+.sd-exp-metric-after { min-width: 80px; font-weight: 600; }
+.sd-exp-metric-change { min-width: 70px; font-weight: 700; }
+.sd-exp-metric-detail { color: #9ca3af; font-style: italic; }
+
+.sd-exp-metric-sig {
+  margin-left: auto;
+  padding: 1px 8px;
+  font-size: 9px;
+  font-weight: 700;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.sd-exp-sig-yes { background: #dcfce7; color: #166534; }
+.sd-exp-sig-no  { background: #f3f4f6; color: #9ca3af; }
+
+/* Color-coded metric rows */
+.sd-exp-metric-positive { background: #f0fdf4; }
+.sd-exp-metric-positive .sd-exp-metric-after { color: #16a34a; }
+.sd-exp-metric-positive .sd-exp-metric-change { color: #16a34a; }
+
+.sd-exp-metric-negative { background: #fef2f2; }
+.sd-exp-metric-negative .sd-exp-metric-after { color: #dc2626; }
+.sd-exp-metric-negative .sd-exp-metric-change { color: #dc2626; }
+
+.sd-exp-metric-neutral { background: #fff; }
+.sd-exp-metric-neutral .sd-exp-metric-after { color: #374151; }
+.sd-exp-metric-neutral .sd-exp-metric-change { color: #6b7280; }
+
+.sd-exp-metric-insufficient { background: #f9fafb; }
+.sd-exp-metric-insufficient .sd-exp-metric-name { color: #9ca3af; }
+
+/* No data message */
+.sd-exp-test-nodata {
+  padding: 8px 10px;
+  font-size: 11px;
+  color: #9ca3af;
+  background: #f9fafb;
+  border-radius: 6px;
   font-style: italic;
 }

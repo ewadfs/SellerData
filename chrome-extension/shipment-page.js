@@ -55,10 +55,34 @@
 
   /**
    * Check whether a shipment row is AWD based on its text content.
+   * Shipment IDs starting with "STAR" are AWD shipments.
    */
   function isAWDShipment(row) {
     const text = row.textContent || '';
+
+    // STAR-prefixed shipment IDs are always AWD
+    if (/\bSTAR[A-Z0-9]+\b/.test(text)) return true;
+
+    // Check shipment ID data attribute
+    if (row.dataset.shipmentId && /^STAR/i.test(row.dataset.shipmentId)) return true;
+
+    // Check for shipment ID in links
+    const shipmentLink = row.querySelector('a[href*="shipment"]');
+    if (shipmentLink) {
+      const href = shipmentLink.getAttribute('href') || '';
+      const linkText = shipmentLink.textContent || '';
+      if (/STAR[A-Z0-9]+/.test(href) || /^STAR/i.test(linkText.trim())) return true;
+    }
+
     return AWD_KEYWORDS.some(kw => text.toUpperCase().includes(kw.toUpperCase()));
+  }
+
+  /**
+   * Detect the shipment type from a row — FBA or AWD.
+   * Returns 'AWD' or 'FBA'.
+   */
+  function getShipmentType(row) {
+    return isAWDShipment(row) ? 'AWD' : 'FBA';
   }
 
   // ============================================================
@@ -399,8 +423,9 @@
 
   /**
    * Collect all unreconciled rows and build a reconciliation summary banner
-   * with total missing units, estimated dollar value, and a "Copy Claim"
-   * button that generates case text for reimbursement.
+   * with total missing units and separate FBA vs AWD sections.
+   * AWD shipments (STAR-prefixed) have different reconciliation expectations
+   * and use different claim text than standard FBA shipments.
    */
   function buildReconciliationBanner() {
     let banner = document.getElementById(RECON_BANNER_ID);
@@ -416,6 +441,7 @@
       const shipped = parseInt(shipmentData.quantityShipped) || 0;
       const received = parseInt(shipmentData.quantityReceived) || 0;
       const missing = shipped - received;
+      const type = getShipmentType(row);
 
       if (missing > 0) {
         unreconciledData.push({
@@ -426,6 +452,7 @@
           missing,
           status: shipmentData.status,
           created: shipmentData.created,
+          type,
           row
         });
       }
@@ -436,7 +463,11 @@
       return;
     }
 
+    const fbaData = unreconciledData.filter(d => d.type === 'FBA');
+    const awdData = unreconciledData.filter(d => d.type === 'AWD');
     const totalMissing = unreconciledData.reduce((s, d) => s + d.missing, 0);
+    const fbaMissing = fbaData.reduce((s, d) => s + d.missing, 0);
+    const awdMissing = awdData.reduce((s, d) => s + d.missing, 0);
 
     if (!banner) {
       banner = document.createElement('div');
@@ -452,16 +483,55 @@
       }
     }
 
-    const itemsHTML = unreconciledData.map(d => `
-      <div class="sd-recon-item">
-        <span class="sd-recon-item-name">${d.name || d.shipmentId || '—'}</span>
-        <span class="sd-recon-item-id">${d.shipmentId || ''}</span>
-        <span class="sd-recon-item-detail">
-          Shipped: ${d.shipped} | Received: ${d.received} |
-          <strong>Missing: ${d.missing}</strong>
-        </span>
-      </div>
-    `).join('');
+    function buildItemsHTML(data) {
+      return data.map(d => `
+        <div class="sd-recon-item">
+          <span class="sd-recon-item-type sd-recon-type-${d.type.toLowerCase()}">${d.type}</span>
+          <span class="sd-recon-item-name">${d.name || d.shipmentId || '—'}</span>
+          <span class="sd-recon-item-id">${d.shipmentId || ''}</span>
+          <span class="sd-recon-item-detail">
+            Shipped: ${d.shipped} | Received: ${d.received} |
+            <strong>Missing: ${d.missing}</strong>
+          </span>
+        </div>
+      `).join('');
+    }
+
+    // FBA section
+    let fbaSection = '';
+    if (fbaData.length > 0) {
+      fbaSection = `
+        <div class="sd-recon-type-section">
+          <div class="sd-recon-type-header">FBA Shipments (${fbaData.length})</div>
+          <div class="sd-recon-list">${buildItemsHTML(fbaData)}</div>
+          <div class="sd-recon-actions">
+            <button class="sd-recon-claim-btn" id="sd-recon-claim-fba">
+              Copy FBA Claim Text (${fbaMissing} units)
+            </button>
+            <span class="sd-recon-claim-note" id="sd-recon-claim-note-fba"></span>
+          </div>
+        </div>
+      `;
+    }
+
+    // AWD section
+    let awdSection = '';
+    if (awdData.length > 0) {
+      awdSection = `
+        <div class="sd-recon-type-section sd-recon-awd-section">
+          <div class="sd-recon-type-header">AWD Shipments — STAR* (${awdData.length})
+            <span class="sd-recon-awd-note">AWD shipments may have different processing timelines and reconciliation procedures</span>
+          </div>
+          <div class="sd-recon-list">${buildItemsHTML(awdData)}</div>
+          <div class="sd-recon-actions">
+            <button class="sd-recon-claim-btn sd-recon-claim-awd" id="sd-recon-claim-awd">
+              Copy AWD Claim Text (${awdMissing} units)
+            </button>
+            <span class="sd-recon-claim-note" id="sd-recon-claim-note-awd"></span>
+          </div>
+        </div>
+      `;
+    }
 
     banner.innerHTML = `
       <div class="sd-recon-header">
@@ -477,49 +547,78 @@
           <span class="sd-recon-stat-count">${totalMissing.toLocaleString()}</span>
           <span class="sd-recon-stat-label">Total Missing Units</span>
         </div>
+        ${fbaData.length > 0 ? `
+        <div class="sd-recon-stat">
+          <span class="sd-recon-stat-count">${fbaData.length}</span>
+          <span class="sd-recon-stat-label">FBA</span>
+        </div>` : ''}
+        ${awdData.length > 0 ? `
+        <div class="sd-recon-stat sd-recon-stat-awd">
+          <span class="sd-recon-stat-count">${awdData.length}</span>
+          <span class="sd-recon-stat-label">AWD (STAR*)</span>
+        </div>` : ''}
       </div>
-      <div class="sd-recon-list">${itemsHTML}</div>
-      <div class="sd-recon-actions">
-        <button class="sd-recon-claim-btn" id="sd-recon-claim">
-          Copy Reimbursement Claim Text
-        </button>
-        <span class="sd-recon-claim-note" id="sd-recon-claim-note"></span>
-      </div>
+      ${fbaSection}
+      ${awdSection}
     `;
 
-    // Claim text generation + copy
-    document.getElementById('sd-recon-claim').addEventListener('click', () => {
-      const claimText = generateReconClaimText(unreconciledData, totalMissing);
+    // Attach claim copy handlers
+    attachClaimHandler('sd-recon-claim-fba', 'sd-recon-claim-note-fba', fbaData, fbaMissing, 'FBA');
+    attachClaimHandler('sd-recon-claim-awd', 'sd-recon-claim-note-awd', awdData, awdMissing, 'AWD');
+  }
+
+  function attachClaimHandler(btnId, noteId, data, totalMissing, type) {
+    const btn = document.getElementById(btnId);
+    if (!btn || data.length === 0) return;
+
+    btn.addEventListener('click', () => {
+      const claimText = generateReconClaimText(data, totalMissing, type);
       navigator.clipboard.writeText(claimText).then(() => {
-        const note = document.getElementById('sd-recon-claim-note');
-        const btn = document.getElementById('sd-recon-claim');
+        const note = document.getElementById(noteId);
         if (note) note.textContent = 'Copied! Paste into a new support case.';
-        if (btn) btn.textContent = 'Copied!';
+        btn.textContent = 'Copied!';
         setTimeout(() => {
-          if (btn) btn.textContent = 'Copy Reimbursement Claim Text';
+          btn.textContent = `Copy ${type} Claim Text (${totalMissing} units)`;
+          const note = document.getElementById(noteId);
           if (note) note.textContent = '';
         }, 3000);
       }).catch(() => {
         const ta = document.createElement('textarea');
-        ta.value = generateReconClaimText(unreconciledData, totalMissing);
+        ta.value = generateReconClaimText(data, totalMissing, type);
         ta.style.cssText = 'width:100%;height:180px;margin-top:8px;font-size:12px;';
-        document.getElementById('sd-recon-claim').parentElement.appendChild(ta);
+        btn.parentElement.appendChild(ta);
         ta.select();
       });
     });
   }
 
-  function generateReconClaimText(data, totalMissing) {
+  function generateReconClaimText(data, totalMissing, type) {
+    const isAWD = type === 'AWD';
+
     const lines = [
       'Hello,',
-      '',
-      `I have ${data.length} FBA shipment(s) where the received quantity does not match ` +
-      `the shipped quantity. A total of ${totalMissing} units appear to be missing. ` +
-      `I am requesting an investigation and reimbursement for these discrepancies.`,
-      '',
-      'Affected shipments:',
       ''
     ];
+
+    if (isAWD) {
+      lines.push(
+        `I have ${data.length} AWD (Amazon Warehousing and Distribution) shipment(s) ` +
+        `where the received quantity does not match the shipped quantity. ` +
+        `These are STAR-prefixed shipments sent through the AWD program. ` +
+        `A total of ${totalMissing} units appear to be missing. ` +
+        `I am requesting an investigation and reimbursement for these discrepancies.`
+      );
+    } else {
+      lines.push(
+        `I have ${data.length} FBA shipment(s) where the received quantity does not match ` +
+        `the shipped quantity. A total of ${totalMissing} units appear to be missing. ` +
+        `I am requesting an investigation and reimbursement for these discrepancies.`
+      );
+    }
+
+    lines.push('');
+    lines.push(`Affected ${type} shipments:`);
+    lines.push('');
 
     for (const d of data) {
       const parts = [];
@@ -535,10 +634,19 @@
     lines.push('');
     lines.push(`Total missing units: ${totalMissing}`);
     lines.push('');
-    lines.push(
-      'Please investigate these shipment discrepancies and process reimbursement ' +
-      'for the missing inventory. Thank you.'
-    );
+
+    if (isAWD) {
+      lines.push(
+        'These AWD shipments have been received with quantity discrepancies. ' +
+        'Please investigate through the AWD program and process reimbursement ' +
+        'for the missing inventory. Thank you.'
+      );
+    } else {
+      lines.push(
+        'Please investigate these shipment discrepancies and process reimbursement ' +
+        'for the missing inventory. Thank you.'
+      );
+    }
 
     return lines.join('\n');
   }

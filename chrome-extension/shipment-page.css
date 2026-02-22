@@ -239,3 +239,44 @@ tr.sd-shipment-unreconciled td {
   color: #16a34a;
   font-weight: 600;
 }
+
+/* Type badges (FBA / AWD) */
+.sd-recon-item-type {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 8px;
+  text-transform: uppercase;
+}
+
+.sd-recon-type-fba { background: #eff6ff; color: #2563eb; }
+.sd-recon-type-awd { background: #faf5ff; color: #7c3aed; }
+
+/* AWD stat card */
+.sd-recon-stat-awd { border-color: #c4b5fd; background: #faf5ff; }
+.sd-recon-stat-awd .sd-recon-stat-count { color: #7c3aed; }
+
+/* Type sections */
+.sd-recon-type-section { margin-bottom: 14px; }
+
+.sd-recon-type-header {
+  font-size: 13px;
+  font-weight: 700;
+  color: #232f3e;
+  margin-bottom: 6px;
+}
+
+.sd-recon-awd-note {
+  font-size: 10px;
+  font-weight: 400;
+  color: #7c3aed;
+  margin-left: 6px;
+  font-style: italic;
+}
+
+.sd-recon-awd-section .sd-recon-list { border-color: #c4b5fd; }
+.sd-recon-awd-section .sd-recon-item { border-bottom-color: #ede9fe; }
+
+.sd-recon-claim-awd { background: #7c3aed; }
+.sd-recon-claim-awd:hover { background: #6d28d9; }
