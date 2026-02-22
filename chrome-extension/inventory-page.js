@@ -26,7 +26,10 @@
   const MAX_LOG_ENTRIES = 50; // per SKU
 
   // Fields we track for change detection
-  const TRACKED_FIELDS = ['price', 'quantity', 'title', 'image', 'status'];
+  const TRACKED_FIELDS = [
+    'price', 'quantity', 'title', 'bullet_points', 'description',
+    'image', 'image_positions', 'keywords', 'a_plus_content', 'status'
+  ];
 
   // ============================================================
   // HELPERS
@@ -47,6 +50,10 @@
 
   function sleep(ms) {
     return new Promise(r => setTimeout(r, ms));
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   function formatDate(date) {
@@ -209,6 +216,7 @@
 
   /**
    * Snapshot the current editable values from a row.
+   * Captures all tracked listing fields for diff-based change detection.
    */
   function snapshotRow(row) {
     const snap = {};
@@ -246,9 +254,24 @@
     );
     if (titleEl) snap.title = titleEl.textContent.trim().substring(0, 200);
 
-    // Image — capture src of the product thumbnail
+    // Bullet points — Amazon shows these in edit views or expandable sections
+    snap.bullet_points = snapshotBulletPoints(row);
+
+    // Description
+    snap.description = snapshotTextArea(row, 'description');
+
+    // Image — capture src of the product thumbnail (main image)
     const imgEl = row.querySelector('img[src*="images-amazon"], img[src*="media-amazon"], img.product-image, img');
     if (imgEl) snap.image = imgEl.src || '';
+
+    // Image positions — capture all image srcs in order for position tracking
+    snap.image_positions = snapshotImagePositions(row);
+
+    // Keywords / search terms
+    snap.keywords = snapshotKeywords(row);
+
+    // A+ Content / EBC (Enhanced Brand Content)
+    snap.a_plus_content = snapshotAPlusContent(row);
 
     // Status
     const statusEl = row.querySelector(
@@ -257,6 +280,214 @@
     if (statusEl) snap.status = statusEl.textContent.trim();
 
     return snap;
+  }
+
+  /**
+   * Snapshot bullet points from the row or its expanded edit panel.
+   * Amazon stores bullets in textareas or ordered input fields.
+   */
+  function snapshotBulletPoints(row) {
+    // Bullet-specific inputs/textareas
+    const bulletInputs = row.querySelectorAll(
+      'textarea[name*="bullet"], textarea[name*="feature"], ' +
+      'input[name*="bullet"], input[name*="feature"], ' +
+      'textarea[data-testid*="bullet"], textarea[data-testid*="feature"], ' +
+      'input[data-testid*="bullet"], input[data-testid*="feature"], ' +
+      '[data-testid*="bullet-point"] input, [data-testid*="bullet-point"] textarea, ' +
+      '[class*="bullet"] input, [class*="bullet"] textarea, ' +
+      '[class*="feature"] input, [class*="feature"] textarea'
+    );
+    if (bulletInputs.length > 0) {
+      return Array.from(bulletInputs)
+        .map(el => el.value.trim())
+        .filter(v => v.length > 0)
+        .join(' || ');
+    }
+
+    // Also look in nearby expanded/edit sections tied to this row
+    const editPanel = findEditPanel(row);
+    if (editPanel) {
+      const panelBullets = editPanel.querySelectorAll(
+        'textarea[name*="bullet"], textarea[name*="feature"], ' +
+        'input[name*="bullet"], input[name*="feature"], ' +
+        '[data-testid*="bullet-point"] input, [data-testid*="bullet-point"] textarea'
+      );
+      if (panelBullets.length > 0) {
+        return Array.from(panelBullets)
+          .map(el => el.value.trim())
+          .filter(v => v.length > 0)
+          .join(' || ');
+      }
+    }
+
+    return '';
+  }
+
+  /**
+   * Snapshot a textarea/input field by name pattern (e.g. description).
+   */
+  function snapshotTextArea(row, fieldName) {
+    const selectors = [
+      `textarea[name*="${fieldName}"], input[name*="${fieldName}"]`,
+      `textarea[data-testid*="${fieldName}"], input[data-testid*="${fieldName}"]`,
+      `[data-testid*="${fieldName}"] textarea, [data-testid*="${fieldName}"] input`,
+      `[class*="${fieldName}"] textarea, [class*="${fieldName}"] input`
+    ];
+    for (const sel of selectors) {
+      const el = row.querySelector(sel);
+      if (el) return el.value.trim().substring(0, 500);
+    }
+
+    const editPanel = findEditPanel(row);
+    if (editPanel) {
+      for (const sel of selectors) {
+        const el = editPanel.querySelector(sel);
+        if (el) return el.value.trim().substring(0, 500);
+      }
+    }
+
+    return '';
+  }
+
+  /**
+   * Snapshot all product image URLs in order (for position tracking).
+   * Returns a joined string like "img1.jpg|img2.jpg|img3.jpg".
+   */
+  function snapshotImagePositions(row) {
+    const images = row.querySelectorAll(
+      'img[src*="images-amazon"], img[src*="media-amazon"], img.product-image'
+    );
+    if (images.length <= 1) {
+      // Check expanded edit panel for image gallery
+      const editPanel = findEditPanel(row);
+      if (editPanel) {
+        const panelImages = editPanel.querySelectorAll(
+          'img[src*="images-amazon"], img[src*="media-amazon"], ' +
+          '[data-testid*="image"] img, [class*="image-slot"] img, ' +
+          '[class*="ImageSlot"] img, [class*="image-preview"] img'
+        );
+        if (panelImages.length > 1) {
+          return Array.from(panelImages).map(img => img.src || '').join('|');
+        }
+      }
+      return '';
+    }
+    return Array.from(images).map(img => img.src || '').join('|');
+  }
+
+  /**
+   * Snapshot search terms / keywords.
+   */
+  function snapshotKeywords(row) {
+    const selectors = [
+      'textarea[name*="keyword"], input[name*="keyword"]',
+      'textarea[name*="search_term"], input[name*="search_term"]',
+      'textarea[name*="search-term"], input[name*="search-term"]',
+      'textarea[name*="generic_keyword"], input[name*="generic_keyword"]',
+      'textarea[data-testid*="keyword"], input[data-testid*="keyword"]',
+      'textarea[data-testid*="search-term"], input[data-testid*="search-term"]',
+      '[data-testid*="keyword"] textarea, [data-testid*="keyword"] input',
+      '[class*="keyword"] textarea, [class*="keyword"] input',
+      '[class*="search-term"] textarea, [class*="search-term"] input'
+    ];
+
+    for (const sel of selectors) {
+      const el = row.querySelector(sel);
+      if (el) return el.value.trim().substring(0, 500);
+    }
+
+    const editPanel = findEditPanel(row);
+    if (editPanel) {
+      for (const sel of selectors) {
+        const el = editPanel.querySelector(sel);
+        if (el) return el.value.trim().substring(0, 500);
+      }
+    }
+
+    return '';
+  }
+
+  /**
+   * Snapshot A+ Content / Enhanced Brand Content status.
+   * A+ content is usually not inline-editable but its presence or
+   * status indicator may change.
+   */
+  function snapshotAPlusContent(row) {
+    // Look for A+ / EBC indicators
+    const aplusSelectors = [
+      '[data-testid*="a-plus"], [data-testid*="aplus"], [data-testid*="ebc"]',
+      '[class*="a-plus"], [class*="aplus"], [class*="ebc"], [class*="Aplus"], [class*="APlus"]',
+      '[class*="enhanced-content"], [class*="EnhancedContent"]',
+      '[data-testid*="enhanced"]'
+    ];
+
+    for (const sel of aplusSelectors) {
+      const el = row.querySelector(sel);
+      if (el) return el.textContent.trim().substring(0, 200);
+    }
+
+    // Check in text content for A+ references
+    const text = row.textContent || '';
+    if (/a\+\s*content/i.test(text) || /enhanced\s*brand/i.test(text) || /\bEBC\b/.test(text)) {
+      // Try to find the status near it
+      const statusEls = row.querySelectorAll('span, div, td');
+      for (const el of statusEls) {
+        const t = el.textContent.trim();
+        if (/a\+|ebc|enhanced/i.test(t) && t.length < 100) return t;
+      }
+    }
+
+    const editPanel = findEditPanel(row);
+    if (editPanel) {
+      for (const sel of aplusSelectors) {
+        const el = editPanel.querySelector(sel);
+        if (el) return el.textContent.trim().substring(0, 200);
+      }
+    }
+
+    return '';
+  }
+
+  /**
+   * Find an expanded edit panel associated with a row.
+   * Amazon may render inline edit sections as a sibling row, a child
+   * panel, or a separate section linked by data attributes.
+   */
+  function findEditPanel(row) {
+    // Sibling row that acts as an expansion panel
+    const nextRow = row.nextElementSibling;
+    if (nextRow && (
+      nextRow.classList.contains('edit-panel') ||
+      nextRow.querySelector('[class*="edit"], [class*="Edit"], [data-testid*="edit"]') ||
+      nextRow.querySelector('textarea, [class*="bullet"], [class*="keyword"]')
+    )) {
+      return nextRow;
+    }
+
+    // Child panel
+    const childPanel = row.querySelector(
+      '[class*="edit-panel"], [class*="editPanel"], [class*="expansion"], ' +
+      '[class*="detail-panel"], [class*="detailPanel"], [data-testid*="edit-panel"]'
+    );
+    if (childPanel) return childPanel;
+
+    // Linked by ASIN/SKU data attribute
+    const asin = row.dataset.asin;
+    const sku = row.dataset.sku || row.dataset.msku;
+    if (asin) {
+      const linked = document.querySelector(
+        `[data-asin="${asin}"][class*="edit"], [data-asin="${asin}"][class*="detail"]`
+      );
+      if (linked && linked !== row) return linked;
+    }
+    if (sku) {
+      const linked = document.querySelector(
+        `[data-sku="${sku}"][class*="edit"], [data-msku="${sku}"][class*="edit"]`
+      );
+      if (linked && linked !== row) return linked;
+    }
+
+    return null;
   }
 
   // ============================================================
@@ -354,11 +585,20 @@
     const testid = (input.dataset.testid || '').toLowerCase();
     const id = (input.id || '').toLowerCase();
     const placeholder = (input.placeholder || '').toLowerCase();
-    const context = [name, testid, id, placeholder].join(' ');
+    const ariaLabel = (input.getAttribute('aria-label') || '').toLowerCase();
+    const context = [name, testid, id, placeholder, ariaLabel].join(' ');
 
-    if (/price|cost|amount/.test(context)) return 'price';
+    // Also check the label / wrapper text for context
+    const wrapper = input.closest('div, td, .form-group, [class*="field"], [class*="input"]');
+    const wrapperText = wrapper ? wrapper.textContent.toLowerCase().substring(0, 200) : '';
+
+    if (/price|cost|amount|sale.?price|your.?price/.test(context)) return 'price';
     if (/quantity|qty|units|stock/.test(context)) return 'quantity';
-    if (/title|name|product.?name/.test(context)) return 'title';
+    if (/bullet|feature.?point/.test(context) || /bullet|feature.?point/.test(wrapperText)) return 'bullet_points';
+    if (/description|product.?desc/.test(context) || /\bdescription\b/.test(wrapperText)) return 'description';
+    if (/keyword|search.?term|generic.?keyword/.test(context) || /keyword|search.?term/.test(wrapperText)) return 'keywords';
+    if (/a.?\+|aplus|enhanced.?brand|ebc/.test(context) || /a\+\s*content|enhanced\s*brand|ebc/.test(wrapperText)) return 'a_plus_content';
+    if (/title|product.?name/.test(context)) return 'title';
     if (/image|photo|img/.test(context)) return 'image';
 
     return null;
@@ -529,7 +769,24 @@
            /edit.*listing/i.test(url) ||
            /update.*price/i.test(url) ||
            /update.*quantity/i.test(url) ||
-           /manage.*inventory.*update/i.test(url);
+           /manage.*inventory.*update/i.test(url) ||
+           /bullet.*save/i.test(url) ||
+           /description.*save/i.test(url) ||
+           /keyword.*save/i.test(url) ||
+           /search.?term.*save/i.test(url) ||
+           /image.*save/i.test(url) ||
+           /image.*upload/i.test(url) ||
+           /image.*update/i.test(url) ||
+           /image.*reorder/i.test(url) ||
+           /image.*delete/i.test(url) ||
+           /aplus.*save/i.test(url) ||
+           /a-plus.*save/i.test(url) ||
+           /enhanced.*content.*save/i.test(url) ||
+           /ebc.*save/i.test(url) ||
+           /catalog.*update/i.test(url) ||
+           /catalog.*save/i.test(url) ||
+           /abis.*submit/i.test(url) ||
+           /product-attribute.*save/i.test(url);
   }
 
   // ============================================================
@@ -659,14 +916,32 @@
       detailHTML = `<span class="sd-inv-old-val">$${entry.oldVal}</span> → <span class="sd-inv-new-val">$${entry.newVal}</span>`;
     } else if (entry.field === 'quantity') {
       detailHTML = `<span class="sd-inv-old-val">${entry.oldVal}</span> → <span class="sd-inv-new-val">${entry.newVal}</span>`;
-    } else if (entry.field === 'image') {
+    } else if (entry.field === 'image' || entry.field === 'a_plus_content') {
       detailHTML = '<span class="sd-inv-new-val">updated</span>';
-    } else if (entry.field === 'title') {
-      const oldShort = (entry.oldVal || '').substring(0, 40);
-      const newShort = (entry.newVal || '').substring(0, 40);
-      detailHTML = `<span class="sd-inv-old-val" title="${entry.oldVal}">${oldShort}...</span> → <span class="sd-inv-new-val" title="${entry.newVal}">${newShort}...</span>`;
+    } else if (entry.field === 'image_positions') {
+      detailHTML = '<span class="sd-inv-new-val">reordered</span>';
+    } else if (entry.field === 'title' || entry.field === 'description') {
+      const oldShort = escapeHtml((entry.oldVal || '').substring(0, 40));
+      const newShort = escapeHtml((entry.newVal || '').substring(0, 40));
+      const oldFull = escapeHtml(entry.oldVal || '');
+      const newFull = escapeHtml(entry.newVal || '');
+      detailHTML = `<span class="sd-inv-old-val" title="${oldFull}">${oldShort}${entry.oldVal.length > 40 ? '...' : ''}</span> → <span class="sd-inv-new-val" title="${newFull}">${newShort}${entry.newVal.length > 40 ? '...' : ''}</span>`;
+    } else if (entry.field === 'bullet_points') {
+      // Show count of bullets changed
+      const oldCount = entry.oldVal ? entry.oldVal.split(' || ').filter(b => b.length > 0).length : 0;
+      const newCount = entry.newVal ? entry.newVal.split(' || ').filter(b => b.length > 0).length : 0;
+      const oldPreview = escapeHtml((entry.oldVal || '').substring(0, 50));
+      const newPreview = escapeHtml((entry.newVal || '').substring(0, 50));
+      detailHTML = `<span class="sd-inv-new-val" title="${escapeHtml(entry.newVal)}">${newCount} bullet${newCount !== 1 ? 's' : ''} updated</span>`;
+      if (oldCount !== newCount) {
+        detailHTML = `<span class="sd-inv-old-val">${oldCount}</span> → <span class="sd-inv-new-val">${newCount} bullets</span>`;
+      }
+    } else if (entry.field === 'keywords') {
+      const oldShort = escapeHtml((entry.oldVal || '').substring(0, 40));
+      const newShort = escapeHtml((entry.newVal || '').substring(0, 40));
+      detailHTML = `<span class="sd-inv-old-val" title="${escapeHtml(entry.oldVal)}">${oldShort}${entry.oldVal.length > 40 ? '...' : ''}</span> → <span class="sd-inv-new-val" title="${escapeHtml(entry.newVal)}">${newShort}${entry.newVal.length > 40 ? '...' : ''}</span>`;
     } else {
-      detailHTML = `<span class="sd-inv-old-val">${entry.oldVal}</span> → <span class="sd-inv-new-val">${entry.newVal}</span>`;
+      detailHTML = `<span class="sd-inv-old-val">${escapeHtml(entry.oldVal)}</span> → <span class="sd-inv-new-val">${escapeHtml(entry.newVal)}</span>`;
     }
 
     return `
@@ -684,7 +959,12 @@
       price: 'Price',
       quantity: 'Qty',
       title: 'Title',
+      bullet_points: 'Bullets',
+      description: 'Description',
       image: 'Image',
+      image_positions: 'Image Order',
+      keywords: 'Keywords',
+      a_plus_content: 'A+ Content',
       status: 'Status'
     };
     return labels[field] || field;
@@ -695,8 +975,13 @@
       price: '$',
       quantity: '#',
       title: 'T',
-      image: '\u25A3',
-      status: '\u25CF'
+      bullet_points: '\u2022',  // bullet character
+      description: '\u00B6',    // pilcrow / paragraph
+      image: '\u25A3',          // filled square
+      image_positions: '\u2B83', // arrow swap
+      keywords: '\u2315',       // search / telephone recorder
+      a_plus_content: 'A+',
+      status: '\u25CF'          // filled circle
     };
     return icons[field] || '\u2022';
   }
@@ -706,8 +991,8 @@
   // ============================================================
 
   /**
-   * Periodically check for image changes (since image swaps don't fire
-   * input events — the src just changes).
+   * Periodically check for image and image-position changes (since image
+   * swaps don't fire input events — the src just changes).
    */
   function watchImageChanges() {
     setInterval(() => {
@@ -716,16 +1001,25 @@
         const sku = getRowSku(row);
         if (!sku || !snapshots[sku]) return;
 
+        // Main image change
         const imgEl = row.querySelector('img[src*="images-amazon"], img[src*="media-amazon"], img');
-        if (!imgEl) return;
+        if (imgEl) {
+          const currentSrc = imgEl.src || '';
+          const oldSrc = snapshots[sku].image || '';
+          if (oldSrc && currentSrc && oldSrc !== currentSrc) {
+            addChangeEntry(sku, 'image', 'previous image', 'new image').then(() => {
+              snapshots[sku].image = currentSrc;
+              refreshChangelogColumn();
+            });
+          }
+        }
 
-        const currentSrc = imgEl.src || '';
-        const oldSrc = snapshots[sku].image || '';
-
-        if (oldSrc && currentSrc && oldSrc !== currentSrc) {
-          // Image changed
-          addChangeEntry(sku, 'image', 'previous image', 'new image').then(() => {
-            snapshots[sku].image = currentSrc;
+        // Image positions / reorder
+        const currentPositions = snapshotImagePositions(row);
+        const oldPositions = snapshots[sku].image_positions || '';
+        if (oldPositions && currentPositions && oldPositions !== currentPositions) {
+          addChangeEntry(sku, 'image_positions', oldPositions, currentPositions).then(() => {
+            snapshots[sku].image_positions = currentPositions;
             refreshChangelogColumn();
           });
         }
