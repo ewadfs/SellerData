@@ -199,3 +199,125 @@
   color: #555;
   white-space: nowrap;
 }
+
+/* ============================================================
+   Fix All Needs Attention
+   ============================================================ */
+
+.sd-deal-fix-section {
+  border-top: 1px solid #e5e7eb;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.sd-deal-fix-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sd-deal-fix-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sd-deal-fix-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sd-deal-fix-btn {
+  padding: 7px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  border: none;
+  border-radius: 8px;
+  background: #dc2626;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sd-deal-fix-btn:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.sd-deal-fix-btn:disabled {
+  background: #d5d9d9;
+  color: #888;
+  cursor: not-allowed;
+}
+
+/* ---- Fixed / Error Row States ---- */
+
+.sd-deal-fixed {
+  background-color: #ecfdf5 !important;
+  transition: background-color 0.4s ease;
+}
+
+.sd-deal-fixed td {
+  background-color: transparent !important;
+}
+
+.sd-deal-fix-error {
+  background-color: #fef2f2 !important;
+}
+
+.sd-deal-fix-error td {
+  background-color: transparent !important;
+}
+
+/* ---- Fix Log ---- */
+
+.sd-fix-log {
+  margin-top: 10px;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #fafafa;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.sd-fix-log.hidden {
+  display: none;
+}
+
+.sd-fix-log-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.sd-fix-log-info {
+  color: #374151;
+}
+
+.sd-fix-log-ok {
+  color: #16a34a;
+}
+
+.sd-fix-log-fix {
+  color: #2563eb;
+}
+
+.sd-fix-log-warn {
+  color: #d97706;
+}
+
+.sd-fix-log-error {
+  color: #dc2626;
+}
