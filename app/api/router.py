@@ -6,6 +6,7 @@ from app.api.v1 import (
     advertising,
     brand_analytics,
     business_reports,
+    content_digest,
     inventory,
     keywords,
     marketplaces,
@@ -25,3 +26,4 @@ api_router.include_router(advertising.router)
 api_router.include_router(keywords.router)
 api_router.include_router(account_health.router)
 api_router.include_router(ab_tests.router)
+api_router.include_router(content_digest.router)

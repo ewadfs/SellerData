@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     # AI Engine
     SUGGESTION_EXPIRY_DAYS: int = 30
 
+    # Content Digest
+    ANTHROPIC_API_KEY: str = ""
+    TWITTER_BEARER_TOKEN: str = ""
+    FACEBOOK_ACCESS_TOKEN: str = ""
+    DIGEST_MAX_ITEMS: int = 50
+    DIGEST_IMPORTANCE_THRESHOLD: float = 5.0
+
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 

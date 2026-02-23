@@ -1,5 +1,6 @@
 from app.db.models.ab_testing import ABTest, ABTestMetricSnapshot, ABTestResult
 from app.db.models.account_health import AccountHealthMetric
+from app.db.models.content_digest import ContentItem, ContentSource, Digest, DigestEntry, SeenContent, VIPPerson
 from app.db.models.advertising import AdCampaign, AdGroup, AdKeywordTarget, AdMetricsDaily, AdProductTarget
 from app.db.models.brand_analytics import DemographicsReport, MarketBasketReport, RepeatPurchaseReport, SearchTermReport
 from app.db.models.business_report import BusinessReportDaily
@@ -38,4 +39,10 @@ __all__ = [
     "ABTest",
     "ABTestMetricSnapshot",
     "ABTestResult",
+    "ContentSource",
+    "VIPPerson",
+    "ContentItem",
+    "SeenContent",
+    "Digest",
+    "DigestEntry",
 ]
