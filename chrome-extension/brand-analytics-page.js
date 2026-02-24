@@ -104,6 +104,82 @@
   }
 
   // ============================================================
+  // ENSURE ASIN VIEW (not Brand View)
+  // ============================================================
+
+  /**
+   * The Brand Analytics Query Performance page defaults to "Brand View".
+   * We need to switch to "ASIN View" so the ASIN selector appears.
+   * The toggle is typically a kat-tab-header or a set of tab buttons.
+   */
+  async function ensureAsinView() {
+    // Check if already on ASIN view — look for the ASIN selector being present
+    const existingSelector = findAsinSelector();
+    if (existingSelector) {
+      baLog('Already on ASIN view');
+      return true;
+    }
+
+    baLog('Switching to ASIN view...');
+
+    // Strategy 1: kat-tab-header tabs — click the one containing "ASIN"
+    const katTabs = querySelectorAllDeep('kat-tab-header, [role="tab"]');
+    for (const tab of katTabs) {
+      const text = (tab.textContent || tab.getAttribute('label') || '').toLowerCase();
+      if (text.includes('asin')) {
+        const inner = tab.shadowRoot?.querySelector('button, [role="tab"]') || tab;
+        inner.click();
+        baLog('  Clicked ASIN View tab (kat-tab-header)');
+        await sleep(3000);
+        return true;
+      }
+    }
+
+    // Strategy 2: Regular buttons/links/tabs with text "ASIN View" or "ASIN"
+    const allClickables = querySelectorAllDeep(
+      'button, a, [role="tab"], [role="button"], kat-button, kat-link, kat-tab'
+    );
+    for (const el of allClickables) {
+      const text = (el.textContent || el.getAttribute('label') || '').trim().toLowerCase();
+      if ((text.includes('asin view') || text === 'asin') && isVisible(el)) {
+        const inner = el.shadowRoot?.querySelector('button, a') || el;
+        inner.click();
+        baLog('  Clicked ASIN View tab');
+        await sleep(3000);
+        return true;
+      }
+    }
+
+    // Strategy 3: Look for a toggle/radio group with "ASIN" option
+    const radios = querySelectorAllDeep(
+      'kat-radio-button, kat-radiobutton, input[type="radio"], [role="radio"]'
+    );
+    for (const r of radios) {
+      const text = (r.textContent || r.getAttribute('label') || r.value || '').toLowerCase();
+      if (text.includes('asin')) {
+        const inner = r.querySelector('input[type="radio"]') ||
+                      r.shadowRoot?.querySelector('input[type="radio"]') || r;
+        inner.click();
+        baLog('  Selected ASIN view radio');
+        await sleep(3000);
+        return true;
+      }
+    }
+
+    // Strategy 4: URL-based — append or change viewType param
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('viewType') || url.searchParams.get('viewType') !== 'ASIN') {
+      url.searchParams.set('viewType', 'ASIN');
+      baLog('  Navigating to ASIN view via URL...');
+      window.location.href = url.toString();
+      return 'navigated';
+    }
+
+    baLog('  Could not find ASIN view toggle — may already be on ASIN view', 'warn');
+    return false;
+  }
+
+  // ============================================================
   // ASIN DISCOVERY
   // ============================================================
 
@@ -766,54 +842,26 @@
    *     <div slot="footer">
    *       <kat-button id="downloadModalGenerateDownloadButton" label="Generate Download" variant="primary">
    *         #shadow-root  →  <button class="button">
+   *
+   * Key insight: the slotted children (radios, footer button) are in the
+   * LIGHT DOM as children of <kat-modal>, so we can find them directly
+   * with document.querySelector — no need to traverse shadow DOM.
    */
   async function handleDownloadTypeDialog() {
-    // Wait for modal to appear
+    // Wait for modal to render
     await sleep(2000);
 
-    // ----- 1. Find the kat-modal or dialog -----
-    // Try the kat-modal element first (Amazon's web component)
-    let modal = document.querySelector('kat-modal[visible]') ||
-                document.querySelector('kat-modal');
-
-    // Check if the kat-modal is actually visible / open
-    if (modal) {
-      const shadowDialog = modal.shadowRoot?.querySelector('[role="dialog"]');
-      if (!shadowDialog || !isVisible(shadowDialog)) {
-        // kat-modal exists but isn't open — try deep search
-        modal = null;
-      }
-    }
-
-    if (!modal) {
-      // Fallback: any visible dialog
-      const fallback = querySelectorDeep('[role="dialog"]');
-      if (fallback && isVisible(fallback)) {
-        modal = fallback;
-      }
-    }
-
-    if (!modal) {
-      baLog('  No download-type dialog detected — download may have started directly');
-      return true;
-    }
-
-    baLog('  Download type dialog detected');
-
-    // ----- 2. Select "Simple View" radio -----
-    // Radio buttons are slotted into the kat-modal as light DOM children
-    const radioSources = [
-      ...modal.querySelectorAll(
-        'kat-radio-button, kat-radiobutton, [role="radio"], input[type="radio"], label, ' +
-        '[class*="radio"], [class*="option"]'
-      ),
-      // Also search the kat-modal's shadow root
-      ...(modal.shadowRoot ? modal.shadowRoot.querySelectorAll(
-        'kat-radio-button, kat-radiobutton, [role="radio"], input[type="radio"]'
-      ) : [])
+    // ----- 1. Select "Simple View" radio -----
+    // Radio buttons are light-DOM children of kat-modal, so
+    // document.querySelectorAll finds them directly.
+    const allRadios = [
+      ...document.querySelectorAll('kat-radio-button, kat-radiobutton, [role="radio"], input[type="radio"]'),
+      ...querySelectorAllDeep('kat-radio-button, kat-radiobutton')
     ];
-
-    for (const opt of radioSources) {
+    const seen = new Set();
+    for (const opt of allRadios) {
+      if (seen.has(opt)) continue;
+      seen.add(opt);
       const text = (opt.textContent || opt.value || opt.getAttribute('label') || '').toLowerCase();
       if (text.includes('simple')) {
         const radio = opt.querySelector('input[type="radio"]') ||
@@ -826,22 +874,24 @@
       }
     }
 
-    // ----- 3. Click the modal's "Generate Download" confirmation button -----
-
-    // Direct ID lookup — the modal's confirm button has a specific ID
-    const modalGenBtn = modal.querySelector('#downloadModalGenerateDownloadButton') ||
-                        querySelectorDeep('#downloadModalGenerateDownloadButton');
-    if (modalGenBtn) {
-      const inner = modalGenBtn.shadowRoot?.querySelector('button') || modalGenBtn;
+    // ----- 2. Click the modal's "Generate Download" button -----
+    // The button has a unique ID — find it directly in the document.
+    // It is NOT the outer trigger (#GenerateDownloadButton) — it's
+    // #downloadModalGenerateDownloadButton inside the kat-modal.
+    const modalBtn = document.querySelector('#downloadModalGenerateDownloadButton');
+    if (modalBtn) {
+      const inner = modalBtn.shadowRoot?.querySelector('button') || modalBtn;
       inner.click();
       baLog('  Clicked "Generate Download" in modal (by ID)');
       await sleep(2000);
       return true;
     }
 
-    // Fallback: find a kat-button with label="Generate Download" inside the modal
-    const katBtns = modal.querySelectorAll('kat-button');
+    // Fallback: find any kat-button with label "Generate Download"
+    // that is NOT the outer trigger button
+    const katBtns = document.querySelectorAll('kat-button[label]');
     for (const kb of katBtns) {
+      if (kb.id === 'GenerateDownloadButton') continue; // skip outer trigger
       const lbl = (kb.getAttribute('label') || '').toLowerCase();
       if (lbl.includes('generate download') || lbl.includes('generate report')) {
         const inner = kb.shadowRoot?.querySelector('button') || kb;
@@ -852,34 +902,22 @@
       }
     }
 
-    // Broader fallback: any button with matching text inside modal footer slot
-    const footerSlot = modal.querySelector('[slot="footer"]');
-    if (footerSlot) {
-      const btns = footerSlot.querySelectorAll('button, kat-button, [role="button"]');
-      for (const btn of btns) {
-        const text = (btn.textContent || btn.getAttribute('label') || '').toLowerCase().trim();
-        if (text.includes('generate') || text.includes('download')) {
-          const inner = btn.shadowRoot?.querySelector('button') || btn;
-          inner.click();
-          baLog('  Clicked confirm button in modal footer');
-          await sleep(2000);
-          return true;
+    // Last fallback: look inside [slot="footer"] of kat-modal
+    const modal = document.querySelector('kat-modal');
+    if (modal) {
+      const footer = modal.querySelector('[slot="footer"]');
+      if (footer) {
+        const btns = footer.querySelectorAll('button, kat-button, [role="button"]');
+        for (const btn of btns) {
+          const text = (btn.textContent || btn.getAttribute('label') || '').toLowerCase().trim();
+          if (text.includes('generate') || text.includes('download')) {
+            const inner = btn.shadowRoot?.querySelector('button') || btn;
+            inner.click();
+            baLog('  Clicked confirm button in modal footer');
+            await sleep(2000);
+            return true;
+          }
         }
-      }
-    }
-
-    // Last resort: deep search for any generate/download button that is NOT the
-    // outer trigger (which has id="GenerateDownloadButton")
-    const allBtns = querySelectorAllDeep('button, kat-button');
-    for (const el of allBtns) {
-      if (el.id === 'GenerateDownloadButton') continue; // skip the outer trigger
-      const text = (el.textContent || el.getAttribute('label') || '').toLowerCase().trim();
-      if (text.includes('generate download') && isVisible(el)) {
-        const inner = el.shadowRoot?.querySelector('button') || el;
-        inner.click();
-        baLog('  Clicked "Generate Download" (deep search fallback)');
-        await sleep(2000);
-        return true;
       }
     }
 
@@ -901,6 +939,13 @@
 
     updateButtonState('running');
     baLog('Starting bulk download for all ASINs...');
+
+    // Step 0: Make sure we're on ASIN view (not Brand view)
+    const viewResult = await ensureAsinView();
+    if (viewResult === 'navigated') {
+      baLog('Page navigating to ASIN view — will resume after reload...', 'info');
+      return; // Page is reloading
+    }
 
     // Step 1: Discover all ASINs
     const asins = await discoverAllAsins();
