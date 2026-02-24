@@ -1,11 +1,9 @@
-/**
- * Datarova Bulk Report Downloader - Content Script
- *
- * Runs on app.datarova.com pages:
- *   /projects       → detects project cards (name, ASIN, marketplace)
- *   /projects/*/ranks/* → triggers Export > Daily Ranks
- *   /download-report → clicks download buttons on Ready rows
- */
+// Datarova Bulk Report Downloader - Content Script
+//
+// Runs on app.datarova.com pages:
+//   /projects              → detects project cards (name, ASIN, marketplace)
+//   /projects/<id>/ranks/* → triggers Export > Daily Ranks
+//   /download-report       → clicks download buttons on Ready rows
 
 (function () {
   'use strict';
