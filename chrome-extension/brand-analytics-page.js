@@ -112,72 +112,78 @@
    * "Brand View" (default) and "ASIN View".  We need ASIN View so
    * the per-ASIN selector appears.
    *
-   * The view toggle is plain text tabs ("Brand View" | "ASIN View")
-   * rendered as simple elements (div/span/a) — NOT kat-tab-header
-   * or [role="tab"].  We find them by scanning visible text content.
+   * The view tabs can be rendered as: plain divs/spans/anchors, kat-tab-header
+   * components, [role="tab"] elements, or links.  We search broadly.
    */
   async function ensureAsinView() {
     baLog('Checking view mode...');
 
-    // Find ALL elements whose trimmed text is exactly "ASIN View" or
-    // "Brand View".  Walk the DOM to find the smallest elements that
-    // contain these exact strings (the tab labels themselves, not a
-    // parent that contains both).
-    let asinTab = null;
-    let brandTab = null;
+    // Helper: find elements whose visible text includes a target string.
+    // Returns the most specific (deepest / smallest) matches first.
+    function findElementsByText(target) {
+      const lowerTarget = target.toLowerCase();
+      const results = [];
 
-    const walker = document.createTreeWalker(
-      document.body,
-      NodeFilter.SHOW_ELEMENT,
-      {
-        acceptNode(node) {
-          // Skip our own panel and hidden elements
-          if (node.closest('#' + PANEL_ID)) return NodeFilter.FILTER_REJECT;
-          if (!isVisible(node)) return NodeFilter.FILTER_SKIP;
-          return NodeFilter.FILTER_ACCEPT;
+      // 1. Light DOM: all visible elements
+      const allEls = document.body.querySelectorAll('*');
+      for (const el of allEls) {
+        if (el.id === PANEL_ID || el.closest('#' + PANEL_ID)) continue;
+        const text = (el.textContent || '').trim().toLowerCase();
+        // Match elements whose FULL text is close to the target
+        // (avoids matching huge containers)
+        if (text.length < target.length + 20 && text.includes(lowerTarget) && isVisible(el)) {
+          results.push(el);
         }
       }
-    );
 
-    while (walker.nextNode()) {
-      const el = walker.currentNode;
-      const text = (el.textContent || '').trim();
-      // Must be a small/leaf element — not a huge container
-      if (text === 'ASIN View' || text === 'ASIN view') {
-        asinTab = el;
-      } else if (text === 'Brand View' || text === 'Brand view') {
-        brandTab = el;
-      }
-      if (asinTab && brandTab) break;
-    }
-
-    // Also check shadow DOM (kat components)
-    if (!asinTab) {
-      const deepEls = querySelectorAllDeep('*');
+      // 2. Shadow DOM: search inside kat components
+      const deepEls = querySelectorAllDeep(
+        'kat-tab-header, kat-tab, a, button, span, div, [role="tab"]'
+      );
       for (const el of deepEls) {
-        const text = (el.textContent || '').trim();
-        if ((text === 'ASIN View' || text === 'ASIN view') && isVisible(el)) {
-          asinTab = el;
-          break;
+        if (results.includes(el)) continue;
+        const text = (el.textContent || el.getAttribute('label') || '').trim().toLowerCase();
+        if (text.length < target.length + 20 && text.includes(lowerTarget) && isVisible(el)) {
+          results.push(el);
         }
       }
+
+      // Sort: prefer elements with shorter textContent (more specific/leaf)
+      results.sort((a, b) =>
+        (a.textContent || '').trim().length - (b.textContent || '').trim().length
+      );
+      return results;
     }
 
-    if (!asinTab) {
-      baLog('  Could not find "ASIN View" tab on the page', 'warn');
-      return false;
+    const asinViewEls = findElementsByText('ASIN View');
+    const brandViewEls = findElementsByText('Brand View');
+
+    baLog(`  Found ${asinViewEls.length} "ASIN View" element(s), ${brandViewEls.length} "Brand View" element(s)`);
+
+    // Log details of found elements for debugging
+    for (const el of asinViewEls.slice(0, 3)) {
+      baLog(`    ASIN tab candidate: <${el.tagName.toLowerCase()}> text="${(el.textContent || '').trim().substring(0, 40)}" classes="${el.className}"`);
     }
 
-    // Check if ASIN View is already selected by comparing styles/classes
-    // with Brand View tab.  Common patterns: active class, bold text,
-    // underline, different background, aria-selected, etc.
+    if (asinViewEls.length === 0) {
+      // Last resort: try URL-based navigation
+      baLog('  Could not find "ASIN View" tab — trying URL navigation...', 'warn');
+      const url = new URL(window.location.href);
+      url.searchParams.set('viewType', 'ASIN');
+      window.location.href = url.toString();
+      return 'navigated';
+    }
+
+    const asinTab = asinViewEls[0];
+    const brandTab = brandViewEls.length > 0 ? brandViewEls[0] : null;
+
+    // Check if ASIN View is already selected
     const isAsinActive = (
       asinTab.getAttribute('aria-selected') === 'true' ||
       asinTab.getAttribute('aria-current') === 'true' ||
       asinTab.classList?.contains('active') ||
       asinTab.classList?.contains('selected') ||
       asinTab.getAttribute('selected') !== null ||
-      // If brand tab exists, compare computed font-weight (active tab is bolder)
       (brandTab && window.getComputedStyle(asinTab).fontWeight >
                    window.getComputedStyle(brandTab).fontWeight)
     );
@@ -189,12 +195,25 @@
 
     // Click the ASIN View tab
     baLog('Switching to ASIN view...');
-    asinTab.click();
-    await sleep(4000);
+    const inner = asinTab.shadowRoot?.querySelector('button, a, [role="tab"]') || asinTab;
+    inner.click();
+    baLog(`  Clicked <${asinTab.tagName.toLowerCase()}> element`);
+    await sleep(5000);
 
-    // Verify it switched — look for a kat-predictive-input that wasn't
-    // there before, or just trust the click worked
-    baLog('  Clicked "ASIN View" tab');
+    // Verify: check if a page navigation happened (tab might be an <a> link)
+    // If we're still here, the click was in-page. Verify the view changed
+    // by looking for the ASIN picker or checking if the clicked tab is now active.
+    const afterActive = (
+      asinTab.getAttribute('aria-selected') === 'true' ||
+      asinTab.classList?.contains('active') ||
+      asinTab.classList?.contains('selected')
+    );
+    if (afterActive) {
+      baLog('  Successfully switched to ASIN view');
+    } else {
+      baLog('  Tab clicked but active state unclear — proceeding anyway');
+    }
+
     return true;
   }
 
@@ -955,6 +974,12 @@
     if (viewResult === 'navigated') {
       baLog('Page navigating to ASIN view — will resume after reload...', 'info');
       return; // Page is reloading
+    }
+    if (viewResult === false) {
+      baLog('Cannot proceed — failed to switch to ASIN view. Please manually click the "ASIN View" tab and try again.', 'error');
+      isRunning = false;
+      updateButtonState('idle');
+      return;
     }
 
     // Step 1: Discover all ASINs
