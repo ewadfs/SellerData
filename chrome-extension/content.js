@@ -297,15 +297,15 @@
     console.log('[Datarova Bulk] downloadReadyReports called, count:', count,
       'exportedProjects:', JSON.stringify(exportedProjects));
 
-    var container = await waitForElement(
+    var anyContainer = await waitForElement(
       'table.MuiTable-root, .MuiDataGrid-root, table, [role="grid"]', 8000);
-    if (!container) {
+    if (!anyContainer) {
       console.log('[Datarova Bulk] downloadReadyReports: no table/grid found on page');
       throw new Error('Download report table not found');
     }
 
-    var rows = findTableRows(container);
-    console.log('[Datarova Bulk] downloadReadyReports: found', rows.length, 'rows');
+    var rows = findDataRows();
+    console.log('[Datarova Bulk] downloadReadyReports: found', rows.length, 'data rows');
     if (rows.length === 0) {
       throw new Error('No report rows found');
     }
@@ -517,44 +517,30 @@
   }
 
   async function checkReportStatus(count, exportedProjects) {
-    // Try multiple container selectors — MUI DataGrid uses divs, not <table>
-    var container = await waitForElement(
+    // Wait for at least one table/grid to appear on the page
+    var anyContainer = await waitForElement(
       'table.MuiTable-root, .MuiDataGrid-root, table, [role="grid"]', 8000);
-    if (!container) {
+    if (!anyContainer) {
       console.log('[Datarova Bulk] checkReportStatus: no table/grid found on page');
-      // Debug: log what IS on the page
-      var allTables = document.querySelectorAll('table');
-      var allGrids = document.querySelectorAll('[role="grid"], [role="table"]');
-      console.log('[Datarova Bulk]   debug: tables=' + allTables.length +
-        ' grids=' + allGrids.length);
       return { readyCount: 0, pendingCount: 0, totalCount: 0 };
     }
 
-    console.log('[Datarova Bulk] checkReportStatus: found container:', container.tagName,
-      'classes:', (container.className || '').substring(0, 100));
-
-    // Wait for rows — try multiple selectors for different table implementations
-    var rows;
-
+    // Search ALL containers for data rows (Datarova uses split header/body tables)
+    var allRows = [];
     for (var w = 0; w < 16; w++) {
-      rows = findTableRows(container);
-      if (rows.length > 0) break;
-      console.log('[Datarova Bulk] checkReportStatus: waiting for rows... attempt', w + 1);
-      if (w === 0) {
-        // Debug: log container's first-level child structure
-        var kids = container.children;
-        var kidInfo = [];
-        for (var k = 0; k < Math.min(5, kids.length); k++) {
-          kidInfo.push(kids[k].tagName + '.' + (kids[k].className || '').substring(0, 50));
+      allRows = findDataRows();
+      // Filter out header-only rows (if the only row contains column header text)
+      if (allRows.length === 1) {
+        var text = (allRows[0].textContent || '').toLowerCase();
+        if (text.includes('report name') && text.includes('status') && text.includes('keyword')) {
+          console.log('[Datarova Bulk] checkReportStatus: skipping header-only row');
+          allRows = [];
         }
-        console.log('[Datarova Bulk]   container children:', kidInfo.join(', '));
-        console.log('[Datarova Bulk]   container innerHTML preview:',
-          container.innerHTML.substring(0, 500));
       }
+      if (allRows.length > 0) break;
+      console.log('[Datarova Bulk] checkReportStatus: waiting for data rows... attempt', w + 1);
       await sleep(500);
     }
-
-    var allRows = Array.from(rows || []);
     console.log('[Datarova Bulk] checkReportStatus: found', allRows.length, 'rows,',
       'exportedProjects:', JSON.stringify(exportedProjects));
 
@@ -590,9 +576,18 @@
     };
   }
 
-  // Find table rows using multiple selectors (handles MUI Table, DataGrid, etc.)
-  function findTableRows(container) {
-    var selectors = [
+  // Find data rows across ALL tables/grids on the page.
+  // Datarova uses a split-table layout: one table for the header,
+  // a separate table (inside a scrollable div) for the data rows.
+  // So we search ALL table/grid containers and return rows from the one
+  // with the most data rows.
+  function findDataRows() {
+    var containers = document.querySelectorAll(
+      'table.MuiTable-root, .MuiDataGrid-root, table, [role="grid"]');
+    console.log('[Datarova Bulk] findDataRows: found', containers.length, 'containers');
+
+    var bestRows = [];
+    var ROW_SELECTORS = [
       'tbody tr[id^="body-row-"]',
       'tbody tr',
       '.MuiDataGrid-row',
@@ -600,13 +595,32 @@
       'div[data-rowindex]',
       'tr',
     ];
-    for (var s = 0; s < selectors.length; s++) {
-      var rows = container.querySelectorAll(selectors[s]);
-      if (rows.length > 0) return rows;
+
+    for (var i = 0; i < containers.length; i++) {
+      for (var s = 0; s < ROW_SELECTORS.length; s++) {
+        var rows = containers[i].querySelectorAll(ROW_SELECTORS[s]);
+        if (rows.length > bestRows.length) {
+          console.log('[Datarova Bulk]   container[' + i + '] tag=' +
+            containers[i].tagName + ' class=' +
+            (containers[i].className || '').substring(0, 60) +
+            ' selector="' + ROW_SELECTORS[s] + '" rows=' + rows.length);
+          bestRows = Array.from(rows);
+        }
+      }
     }
-    // Try document-wide
-    var docRows = document.querySelectorAll('.MuiDataGrid-row, [data-rowindex], tbody tr');
-    return docRows;
+
+    // Also try document-wide in case rows are outside any table container
+    var docSelectors = ['.MuiDataGrid-row', '[data-rowindex]', 'tbody tr'];
+    for (var d = 0; d < docSelectors.length; d++) {
+      var docRows = document.querySelectorAll(docSelectors[d]);
+      if (docRows.length > bestRows.length) {
+        console.log('[Datarova Bulk]   document-wide "' + docSelectors[d] +
+          '" rows=' + docRows.length);
+        bestRows = Array.from(docRows);
+      }
+    }
+
+    return bestRows;
   }
 
   function getCells(row) {
