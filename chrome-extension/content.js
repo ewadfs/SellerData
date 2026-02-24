@@ -14,6 +14,8 @@
   if (window.__datarova_bulk_loaded) return;
   window.__datarova_bulk_loaded = true;
 
+  console.log('[Datarova Bulk] content script loaded v3');
+
   // ── Project Detection (runs on /projects page) ───────────────────────────
 
   function detectProjects() {
@@ -34,33 +36,45 @@
         var card = findCardContainer(a);
         var name = extractNameFromCard(card, asin);
 
-        // Marketplace detection is wrapped separately so it can never
-        // crash the overall project detection
-        var marketplace = null;
+        var marketplace = 'US';
         try {
-          marketplace = extractMarketplace(card);
+          marketplace = extractMarketplace(card) || 'US';
         } catch (e) {
           console.warn('[Datarova Bulk] marketplace detection error:', e);
         }
 
         projects.push({
           id: projectId,
-          name: name || 'Project ' + projectId,
+          name: name || nameFromCardId(card) || 'Project ' + projectId,
           asin: asin || '',
-          marketplace: marketplace || 'US',
+          marketplace: marketplace,
         });
       } catch (err) {
-        console.error('[Datarova Bulk] error detecting project from link:', err);
+        console.error('[Datarova Bulk] error detecting project:', err);
       }
     });
 
+    console.log('[Datarova Bulk] detected', projects.length, 'projects:', projects);
     return projects;
   }
 
+  /**
+   * Find the card container by walking up from the <a> link.
+   * Datarova cards have id="card-{project-name-slug}", e.g.:
+   *   card-cad-bamboo-cutting-board, card-utensil-holder-uk, card-popcorn-maker
+   * The <a> is typically a direct child of this card div.
+   */
   function findCardContainer(el) {
     var current = el;
     for (var i = 0; i < 10 && current.parentElement; i++) {
       current = current.parentElement;
+
+      // Primary: Datarova cards have id="card-..."
+      if (current.id && current.id.indexOf('card-') === 0) {
+        return current;
+      }
+
+      // Fallback: generic card detection
       var text = current.textContent || '';
       if (current.querySelector('img') &&
           (text.includes('Keyword') || text.includes('ASIN'))) {
@@ -112,6 +126,18 @@
     return '';
   }
 
+  /**
+   * Fallback name extraction from the card ID.
+   * "card-cad-bamboo-cutting-board" → "Cad Bamboo Cutting Board"
+   */
+  function nameFromCardId(card) {
+    if (!card || !card.id || card.id.indexOf('card-') !== 0) return '';
+    var slug = card.id.substring(5); // remove "card-"
+    return slug.split('-').map(function (w) {
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    }).join(' ');
+  }
+
   function extractAsinFromText(el) {
     var text = (el.textContent || '') + ' ' + (el.href || '');
     var match = text.match(/\b(B0[A-Z0-9]{8})\b/);
@@ -120,172 +146,81 @@
 
   // ── Marketplace Detection ────────────────────────────────────────────────
   //
-  // Multi-strategy approach. Each strategy is isolated so a failure in one
-  // does not prevent the others from running.
+  // Primary strategy: parse the card id attribute.
+  // Datarova card IDs encode the project name slug, which includes
+  // marketplace codes:
+  //   "card-cad-bamboo-cutting-board"  → "cad" = Canada
+  //   "card-utensil-holder-uk"         → "uk"  = UK
+  //   "card-popcorn-maker"             → no code = US (default)
+  //   "card-butter-dish-uk"            → "uk"  = UK
+  //   "card-cad-rotating-utensil-holder" → "cad" = Canada
 
-  var CODE_MAP = {
-    'us': 'US', 'ca': 'CA', 'mx': 'MX', 'uk': 'UK', 'gb': 'UK',
-    'de': 'DE', 'fr': 'FR', 'it': 'IT', 'es': 'ES', 'jp': 'JP',
-    'au': 'AU', 'in': 'IN', 'br': 'BR', 'nl': 'NL', 'se': 'SE',
-    'pl': 'PL', 'sg': 'SG', 'ae': 'AE', 'sa': 'SA',
+  // 3-letter codes: safe to match anywhere in the slug
+  var SLUG_CODES_3 = {
+    'cad': 'CA', 'can': 'CA', 'mex': 'MX',
+    'ger': 'DE', 'fra': 'FR', 'ita': 'IT', 'esp': 'ES',
+    'jpn': 'JP', 'aus': 'AU', 'ind': 'IN', 'bra': 'BR',
   };
 
-  var COUNTRY_NAMES = {
-    'united states': 'US', 'usa': 'US', 'america': 'US',
-    'canada': 'CA', 'mexico': 'MX',
-    'united kingdom': 'UK', 'great britain': 'UK',
-    'germany': 'DE', 'france': 'FR', 'italy': 'IT', 'spain': 'ES',
-    'japan': 'JP', 'australia': 'AU', 'india': 'IN',
+  // 2-letter codes: only match at start or end of slug to avoid false positives
+  var SLUG_CODES_2 = {
+    'uk': 'UK', 'gb': 'UK', 'ca': 'CA', 'mx': 'MX',
+    'de': 'DE', 'fr': 'FR', 'it': 'IT', 'es': 'ES',
+    'jp': 'JP', 'au': 'AU', 'in': 'IN', 'br': 'BR',
+    'us': 'US',
   };
 
   function extractMarketplace(card) {
     if (!card) return null;
-    var result;
 
-    // Strategy 1: Small flag images — check src filename and alt/title
-    result = strategyFlagImages(card);
-    if (result) return result;
+    // Strategy 1: Parse the card ID (most reliable)
+    if (card.id && card.id.indexOf('card-') === 0) {
+      var result = parseMarketplaceFromCardId(card.id);
+      if (result) return result;
+    }
 
-    // Strategy 2: Elements with flag/country classes or data attributes
-    result = strategyClassesAndAttrs(card);
-    if (result) return result;
+    // Strategy 2: Walk up to find a parent with card- ID (if findCardContainer
+    // returned a child element)
+    var parent = card.parentElement;
+    for (var i = 0; i < 5 && parent; i++) {
+      if (parent.id && parent.id.indexOf('card-') === 0) {
+        var result2 = parseMarketplaceFromCardId(parent.id);
+        if (result2) return result2;
+      }
+      parent = parent.parentElement;
+    }
 
-    // Strategy 3: Flag emojis in text
-    result = strategyFlagEmojis(card);
-    if (result) return result;
+    // Strategy 3: Check card text content for marketplace indicators
+    var text = (card.textContent || '').toLowerCase();
+    if (text.indexOf(' cad ') !== -1 || text.indexOf('cad ') === 0) return 'CA';
+    if (text.indexOf(' uk ') !== -1 || text.indexOf(' uk') === text.length - 3) return 'UK';
 
     return null;
   }
 
-  function strategyFlagImages(card) {
-    var imgs = card.querySelectorAll('img');
-    for (var i = 0; i < imgs.length; i++) {
-      var img = imgs[i];
+  function parseMarketplaceFromCardId(cardId) {
+    // "card-cad-bamboo-cutting-board" → parts: ["cad","bamboo","cutting","board"]
+    var parts = cardId.toLowerCase().split('-');
+    if (parts[0] !== 'card' || parts.length < 2) return null;
+    parts = parts.slice(1); // remove "card" prefix
 
-      // Skip product photos (large images). Flags are tiny icons.
-      try {
-        var w = img.getBoundingClientRect().width;
-        if (w > 60) continue;
-      } catch (e) { /* ignore */ }
+    // Check first segment (most common position for marketplace prefix)
+    if (SLUG_CODES_3[parts[0]]) return SLUG_CODES_3[parts[0]];
+    if (SLUG_CODES_2[parts[0]]) return SLUG_CODES_2[parts[0]];
 
-      // Check src URL for country code in filename
-      var src = (img.src || '').toLowerCase();
-      var urlPath = src.split('?')[0].split('#')[0];
-      var segments = urlPath.split('/');
-      var filename = segments[segments.length - 1] || '';
-      var nameOnly = filename.replace(/\.[^.]+$/, '');
-
-      // Exact 2-letter filename: "us.svg", "ca.png"
-      if (nameOnly.length === 2 && CODE_MAP[nameOnly]) {
-        return CODE_MAP[nameOnly];
-      }
-
-      // Filename with prefix/suffix: "flag-us", "us-flag", "flag_ca"
-      var fnMatch = nameOnly.match(/(?:^|[-_])([a-z]{2})(?:[-_]|$)/);
-      if (fnMatch && CODE_MAP[fnMatch[1]]) {
-        return CODE_MAP[fnMatch[1]];
-      }
-
-      // Check path segments: /flags/us/flag.svg
-      for (var s = Math.max(1, segments.length - 4); s < segments.length - 1; s++) {
-        var seg = segments[s];
-        if (seg.length === 2 && CODE_MAP[seg]) {
-          return CODE_MAP[seg];
-        }
-      }
-
-      // Check alt and title attributes
-      var alt = (img.alt || '').toLowerCase().trim();
-      var title = (img.title || '').toLowerCase().trim();
-
-      for (var a = 0; a < 2; a++) {
-        var attr = a === 0 ? alt : title;
-        if (!attr) continue;
-        if (attr.length === 2 && CODE_MAP[attr]) return CODE_MAP[attr];
-        var resolved = resolveCountryName(attr);
-        if (resolved) return resolved;
-      }
-
-      // Fallback: original simple pattern matching on full src + alt
-      var combined = src + ' ' + alt;
-      var patterns = [
-        ['/us', 'US'], ['_us', 'US'],
-        ['/ca', 'CA'], ['_ca', 'CA'],
-        ['/mx', 'MX'], ['_mx', 'MX'],
-        ['/uk', 'UK'], ['_uk', 'UK'], ['/gb', 'UK'], ['_gb', 'UK'],
-        ['/de', 'DE'], ['_de', 'DE'],
-        ['/fr', 'FR'], ['_fr', 'FR'],
-        ['/it', 'IT'], ['_it', 'IT'],
-        ['/es', 'ES'], ['_es', 'ES'],
-        ['/jp', 'JP'], ['_jp', 'JP'],
-        ['/au', 'AU'], ['_au', 'AU'],
-        ['/in', 'IN'], ['_in', 'IN'],
-      ];
-      for (var p = 0; p < patterns.length; p++) {
-        if (combined.includes(patterns[p][0])) return patterns[p][1];
-      }
-    }
-    return null;
-  }
-
-  function strategyClassesAndAttrs(card) {
-    // Check elements with known flag/country attributes or classes
-    var els;
-    try {
-      els = card.querySelectorAll(
-        '[class*="flag"], [class*="country"], [class*="marketplace"], ' +
-        '[data-country], [data-marketplace]'
-      );
-    } catch (e) {
-      return null;
+    // Check last segment (common for suffix like "butter-dish-uk")
+    var last = parts[parts.length - 1];
+    if (parts.length > 1) {
+      if (SLUG_CODES_3[last]) return SLUG_CODES_3[last];
+      if (SLUG_CODES_2[last]) return SLUG_CODES_2[last];
     }
 
-    for (var i = 0; i < els.length; i++) {
-      var el = els[i];
-      var className = '';
-      try { className = (typeof el.className === 'string' ? el.className : '').toLowerCase(); } catch (e) {}
-
-      var dataVal = '';
-      try { dataVal = (el.getAttribute('data-country') || el.getAttribute('data-marketplace') || '').toLowerCase(); } catch (e) {}
-
-      var combined = className + ' ' + dataVal;
-
-      var classMatch = combined.match(/(?:flag|country|marketplace)[-_]?([a-z]{2})\b/);
-      if (classMatch && CODE_MAP[classMatch[1]]) {
-        return CODE_MAP[classMatch[1]];
-      }
-
-      if (dataVal.length === 2 && CODE_MAP[dataVal]) return CODE_MAP[dataVal];
-      var resolved = resolveCountryName(dataVal);
-      if (resolved) return resolved;
+    // Check all segments for 3+ letter codes (safe, unlikely false positives)
+    for (var i = 1; i < parts.length - 1; i++) {
+      if (SLUG_CODES_3[parts[i]]) return SLUG_CODES_3[parts[i]];
     }
 
-    return null;
-  }
-
-  function strategyFlagEmojis(card) {
-    var text = card.textContent || '';
-    // Each flag emoji is two regional indicator symbols
-    var flags = [
-      ['\u{1F1FA}\u{1F1F8}', 'US'], ['\u{1F1E8}\u{1F1E6}', 'CA'],
-      ['\u{1F1F2}\u{1F1FD}', 'MX'], ['\u{1F1EC}\u{1F1E7}', 'UK'],
-      ['\u{1F1E9}\u{1F1EA}', 'DE'], ['\u{1F1EB}\u{1F1F7}', 'FR'],
-      ['\u{1F1EE}\u{1F1F9}', 'IT'], ['\u{1F1EA}\u{1F1F8}', 'ES'],
-      ['\u{1F1EF}\u{1F1F5}', 'JP'], ['\u{1F1E6}\u{1F1FA}', 'AU'],
-      ['\u{1F1EE}\u{1F1F3}', 'IN'],
-    ];
-    for (var i = 0; i < flags.length; i++) {
-      if (text.includes(flags[i][0])) return flags[i][1];
-    }
-    return null;
-  }
-
-  function resolveCountryName(str) {
-    if (!str) return null;
-    for (var name in COUNTRY_NAMES) {
-      if (str.includes(name)) return COUNTRY_NAMES[name];
-    }
-    return null;
+    return null; // No marketplace code found → caller defaults to US
   }
 
   // ── Export Triggering (runs on /projects/<id>/ranks/<asin> page) ──────────
