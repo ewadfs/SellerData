@@ -755,74 +755,93 @@
   }
 
   /**
-   * After clicking "Generate Download", a dialog may appear asking which
-   * download type. Select the appropriate type and confirm.
+   * After clicking "Generate Download", a dialog appears asking which
+   * download type (Simple View / Comprehensive).  Select "Simple View"
+   * and click the "Generate Download" confirmation button.
    */
   async function handleDownloadTypeDialog() {
-    await sleep(1000);
+    // Wait for dialog to appear
+    await sleep(2000);
 
-    // Look for the download type selector dialog/modal (may be in shadow DOM)
+    // ----- 1. Find the dialog (light DOM + shadow DOM) -----
     const dialogSelectors = [
       '[role="dialog"]', '.modal', '[class*="modal"]', '[class*="Modal"]',
       '[class*="download-type"]', '[class*="downloadType"]',
       '[class*="popover"]', '[class*="Popover"]'
     ];
 
+    let dialog = null;
     for (const sel of dialogSelectors) {
-      const dialog = querySelectorDeep(sel);
-      if (!dialog || !isVisible(dialog)) continue;
+      const el = querySelectorDeep(sel);
+      if (el && isVisible(el)) { dialog = el; break; }
+    }
 
-      // Look for download type options — prefer "Comprehensive" for full data,
-      // but fall back to "Simple" if comprehensive isn't available
-      const options = dialog.querySelectorAll(
-        '[role="radio"], [role="option"], input[type="radio"], ' +
-        'label, button, [class*="option"], [class*="radio"]'
-      );
+    if (!dialog) {
+      baLog('  No download-type dialog detected — download may have started directly');
+      return true;
+    }
 
-      let selectedOption = null;
+    // ----- 2. Select "Simple View" radio -----
+    // Search inside dialog and also broadly via deep traversal
+    const radioSources = [
+      ...dialog.querySelectorAll(
+        '[role="radio"], [role="option"], input[type="radio"], label, ' +
+        '[class*="option"], [class*="radio"], kat-radio-button, kat-radiobutton'
+      ),
+      ...querySelectorAllDeep('[role="radio"], kat-radio-button, kat-radiobutton')
+    ];
 
-      // First pass: look for "Comprehensive" (has all queries, not limited to 1000)
-      for (const opt of options) {
-        const text = (opt.textContent || opt.value || '').toLowerCase();
-        if (text.includes('comprehensive')) {
-          selectedOption = opt;
-          break;
-        }
-      }
-
-      // Fallback: "Simple view"
-      if (!selectedOption) {
-        for (const opt of options) {
-          const text = (opt.textContent || opt.value || '').toLowerCase();
-          if (text.includes('simple')) {
-            selectedOption = opt;
-            break;
-          }
-        }
-      }
-
-      if (selectedOption) {
-        // Click the radio/option
-        const radio = selectedOption.querySelector('input[type="radio"]') || selectedOption;
+    const seen = new Set();
+    for (const opt of radioSources) {
+      if (seen.has(opt)) continue;
+      seen.add(opt);
+      const text = (opt.textContent || opt.value || opt.getAttribute('label') || '').toLowerCase();
+      if (text.includes('simple')) {
+        // Click the radio input inside, or the element itself
+        const radio = opt.querySelector('input[type="radio"]') ||
+                      opt.shadowRoot?.querySelector('input[type="radio"]') ||
+                      opt;
         radio.click();
-        await sleep(500);
-      }
-
-      // Click the confirmation/generate button in the dialog
-      const confirmBtns = dialog.querySelectorAll('button, kat-button, [role="button"]');
-      for (const btn of confirmBtns) {
-        const text = (btn.textContent || btn.getAttribute('label') || '').toLowerCase().trim();
-        if (text.includes('generate') || text.includes('download') || text.includes('confirm') ||
-            text.includes('submit') || text.includes('ok')) {
-          btn.click();
-          await sleep(1000);
-          return true;
-        }
+        baLog('  Selected "Simple View"');
+        await sleep(800);
+        break;
       }
     }
 
-    // No dialog appeared — the download may have started directly
-    return true;
+    // ----- 3. Click "Generate Download" confirmation button -----
+    const confirmSources = [
+      ...dialog.querySelectorAll('button, kat-button, [role="button"]'),
+      ...querySelectorAllDeep('button, kat-button, [role="button"]')
+    ];
+
+    const seenBtns = new Set();
+    for (const el of confirmSources) {
+      if (seenBtns.has(el)) continue;
+      seenBtns.add(el);
+      const text = (el.textContent || el.getAttribute('label') || '').toLowerCase().trim();
+      if (text.includes('generate download') || text.includes('generate report')) {
+        const inner = el.shadowRoot?.querySelector('button') || el;
+        inner.click();
+        baLog('  Clicked "Generate Download" in dialog');
+        await sleep(2000);
+        return true;
+      }
+    }
+
+    // Broader fallback — any generate/download/confirm button inside the dialog
+    for (const btn of dialog.querySelectorAll('button, kat-button, [role="button"]')) {
+      const text = (btn.textContent || btn.getAttribute('label') || '').toLowerCase().trim();
+      if (text.includes('generate') || text.includes('download') || text.includes('confirm')) {
+        const inner = btn.shadowRoot?.querySelector('button') || btn;
+        inner.click();
+        baLog('  Clicked confirm button in dialog');
+        await sleep(2000);
+        return true;
+      }
+    }
+
+    baLog('  Could not find confirmation button in download dialog', 'warn');
+    return false;
   }
 
   // ============================================================
