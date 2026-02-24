@@ -582,13 +582,20 @@
   // So we search ALL table/grid containers and return rows from the one
   // with the most data rows.
   function findDataRows() {
+    // Primary selector: Datarova uses tbody tr[id^="body-row-"] for data rows
+    var primaryRows = document.querySelectorAll('tbody tr[id^="body-row-"]');
+    if (primaryRows.length > 0) {
+      console.log('[Datarova Bulk] findDataRows: primary selector found', primaryRows.length, 'rows');
+      return Array.from(primaryRows);
+    }
+
+    // Fallback: search all table/grid containers with various selectors
     var containers = document.querySelectorAll(
       'table.MuiTable-root, .MuiDataGrid-root, table, [role="grid"]');
-    console.log('[Datarova Bulk] findDataRows: found', containers.length, 'containers');
+    console.log('[Datarova Bulk] findDataRows: primary selector found 0, trying fallbacks across', containers.length, 'containers');
 
     var bestRows = [];
     var ROW_SELECTORS = [
-      'tbody tr[id^="body-row-"]',
       'tbody tr',
       '.MuiDataGrid-row',
       '[role="row"]:not(:first-child)',
@@ -600,30 +607,25 @@
       for (var s = 0; s < ROW_SELECTORS.length; s++) {
         var rows = containers[i].querySelectorAll(ROW_SELECTORS[s]);
         if (rows.length > bestRows.length) {
-          console.log('[Datarova Bulk]   container[' + i + '] tag=' +
-            containers[i].tagName + ' class=' +
-            (containers[i].className || '').substring(0, 60) +
-            ' selector="' + ROW_SELECTORS[s] + '" rows=' + rows.length);
+          console.log('[Datarova Bulk]   container[' + i + '] selector="' + ROW_SELECTORS[s] + '" rows=' + rows.length);
           bestRows = Array.from(rows);
         }
       }
     }
 
-    // Also try document-wide in case rows are outside any table container
+    // Document-wide fallback
     var docSelectors = ['.MuiDataGrid-row', '[data-rowindex]', 'tbody tr'];
     for (var d = 0; d < docSelectors.length; d++) {
       var docRows = document.querySelectorAll(docSelectors[d]);
       if (docRows.length > bestRows.length) {
-        console.log('[Datarova Bulk]   document-wide "' + docSelectors[d] +
-          '" rows=' + docRows.length);
+        console.log('[Datarova Bulk]   document-wide "' + docSelectors[d] + '" rows=' + docRows.length);
         bestRows = Array.from(docRows);
       }
     }
 
-    // If we only found header rows, do DOM forensics: find elements containing
-    // exported ASINs and trace their row-like ancestor
+    // Last resort: DOM forensics via ASIN text search
     if (bestRows.length <= 1) {
-      console.log('[Datarova Bulk] findDataRows: standard selectors found <= 1 row, doing DOM forensics');
+      console.log('[Datarova Bulk] findDataRows: fallbacks found <= 1 row, trying DOM forensics');
       var asinRows = findRowsByAsinText();
       if (asinRows.length > bestRows.length) {
         bestRows = asinRows;
