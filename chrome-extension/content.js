@@ -397,69 +397,73 @@
    * Check if the row's "Request Sent" date is today.
    * Datarova format: "Tue, Feb 24, 2026 2:51 PM"
    *
-   * We find the column index from the <thead>, then parse only that cell
-   * to avoid false positives from the "Date Range" column which also
-   * contains date strings.
+   * IMPORTANT: Fails OPEN — if we can't find or parse the date, we allow
+   * the match. The name/ASIN filter still applies so we won't download
+   * completely unrelated reports.
    */
   function isRowFromToday(row) {
     var today = new Date();
     var cells = row.querySelectorAll('td');
     var requestSentIdx = findRequestSentColumnIndex(row);
-    var cellsToCheck = [];
 
-    if (requestSentIdx !== -1 && requestSentIdx < cells.length) {
-      // Only check the specific "Request Sent" column
-      cellsToCheck.push(cells[requestSentIdx]);
-    } else {
-      // Fallback: check all cells (skip first cell if it's a checkbox)
-      for (var c = 0; c < cells.length; c++) cellsToCheck.push(cells[c]);
+    // If we can't find the "Request Sent" column, fail open
+    if (requestSentIdx === -1 || requestSentIdx >= cells.length) {
+      console.log('[Datarova Bulk]   isRowFromToday: column not found, allowing match');
+      return true;
     }
 
-    for (var i = 0; i < cellsToCheck.length; i++) {
-      var cellText = (cellsToCheck[i].textContent || '').trim();
-      if (!cellText || cellText.length < 4) continue;
-
-      // Check for relative time (always today)
-      var cellLower = cellText.toLowerCase();
-      if (cellLower === 'today' ||
-          cellLower.includes('just now') ||
-          cellLower.includes('seconds ago') ||
-          cellLower.includes('minutes ago') || cellLower.includes('minute ago') ||
-          cellLower.includes('hours ago') || cellLower.includes('hour ago')) {
-        return true;
-      }
-
-      // Strip leading day-of-week if present: "Tue, Feb 24..." → "Feb 24..."
-      var cleaned = cellText.replace(/^[A-Za-z]{3},\s*/, '');
-
-      // Try Date.parse (Chrome handles "Feb 24, 2026 2:51 PM" natively)
-      var parsed = new Date(cleaned);
-      if (!isNaN(parsed.getTime())) {
-        if (parsed.getFullYear() === today.getFullYear() &&
-            parsed.getMonth() === today.getMonth() &&
-            parsed.getDate() === today.getDate()) {
-          return true;
-        }
-        // This cell parsed to a valid date but NOT today → skip it
-        continue;
-      }
-
-      // Also try the original text without stripping
-      parsed = new Date(cellText);
-      if (!isNaN(parsed.getTime())) {
-        if (parsed.getFullYear() === today.getFullYear() &&
-            parsed.getMonth() === today.getMonth() &&
-            parsed.getDate() === today.getDate()) {
-          return true;
-        }
-      }
+    var cellText = (cells[requestSentIdx].textContent || '').trim();
+    if (!cellText || cellText.length < 4) {
+      console.log('[Datarova Bulk]   isRowFromToday: empty cell, allowing match');
+      return true;
     }
 
-    console.log('[Datarova Bulk]   isRowFromToday: NO MATCH. reqSentIdx=' + requestSentIdx +
-      ' cellText=' + (requestSentIdx >= 0 && requestSentIdx < cells.length
-        ? '"' + (cells[requestSentIdx].textContent || '').trim() + '"'
-        : '(not found)'));
-    return false;
+    // Check for relative time (always today)
+    var cellLower = cellText.toLowerCase();
+    if (cellLower === 'today' ||
+        cellLower.includes('just now') ||
+        cellLower.includes('ago')) {
+      return true;
+    }
+
+    // Strip leading day-of-week: "Tue, Feb 24..." → "Feb 24..."
+    var cleaned = cellText.replace(/^[A-Za-z]{3,},?\s*/, '');
+
+    // Strategy 1: Date.parse on cleaned text
+    var parsed = tryParseDate(cleaned);
+    if (parsed) return sameDay(parsed, today);
+
+    // Strategy 2: Date.parse on original text
+    parsed = tryParseDate(cellText);
+    if (parsed) return sameDay(parsed, today);
+
+    // Strategy 3: Strip AM/PM time portion, parse just date
+    // "Feb 24, 2026 2:51 PM" → "Feb 24, 2026"
+    var dateOnly = cleaned.replace(/\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|am|pm)?\s*$/i, '');
+    parsed = tryParseDate(dateOnly);
+    if (parsed) return sameDay(parsed, today);
+
+    // Strategy 4: Regex extract "Month Day, Year"
+    var match = cleaned.match(/([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})/);
+    if (match) {
+      parsed = tryParseDate(match[1] + ' ' + match[2] + ', ' + match[3]);
+      if (parsed) return sameDay(parsed, today);
+    }
+
+    // Could not parse — fail OPEN (name/ASIN check still filters)
+    console.log('[Datarova Bulk]   isRowFromToday: could not parse "' + cellText + '", allowing match');
+    return true;
+  }
+
+  function tryParseDate(str) {
+    var d = new Date(str);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function sameDay(a, b) {
+    return a.getFullYear() === b.getFullYear() &&
+           a.getMonth() === b.getMonth() &&
+           a.getDate() === b.getDate();
   }
 
   /** Find the column index of "Request Sent" from the table header row. Cached per table. */
@@ -503,8 +507,8 @@
     el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
   }
 
-  function checkReportStatus(count, exportedProjects) {
-    var table = document.querySelector('table.MuiTable-root, table');
+  async function checkReportStatus(count, exportedProjects) {
+    var table = await waitForElement('table.MuiTable-root, table', 8000);
     if (!table) {
       console.log('[Datarova Bulk] checkReportStatus: no table found');
       return { readyCount: 0, pendingCount: 0, totalCount: 0 };
@@ -672,13 +676,12 @@
     }
 
     if (message.action === 'checkReportStatus') {
-      try {
-        var status = checkReportStatus(message.count, message.exportedProjects);
-        sendResponse(status);
-      } catch (err) {
-        console.error('[Datarova Bulk] checkReportStatus failed:', err);
-        sendResponse({ readyCount: 0, pendingCount: 0, totalCount: 0, error: err.message });
-      }
+      checkReportStatus(message.count, message.exportedProjects)
+        .then(function (status) { sendResponse(status); })
+        .catch(function (err) {
+          console.error('[Datarova Bulk] checkReportStatus failed:', err);
+          sendResponse({ readyCount: 0, pendingCount: 0, totalCount: 0, error: err.message });
+        });
       return true;
     }
 
