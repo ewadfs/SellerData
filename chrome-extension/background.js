@@ -60,16 +60,16 @@ async function handleBulkExport(projects, tabId, returnUrl) {
       console.log('[Datarova BG] triggerExport response:', JSON.stringify(response));
 
       if (response && response.success) {
-        results.push({ id: project.id, name: project.name, success: true });
+        results.push({ id: project.id, name: project.name, asin: project.asin, success: true });
         reportProgress('export', project.name, true, null, i + 1, exportCount);
       } else {
         const error = response?.error || 'Export failed';
-        results.push({ id: project.id, name: project.name, success: false, error });
+        results.push({ id: project.id, name: project.name, asin: project.asin, success: false, error });
         reportProgress('export', project.name, false, error, i + 1, exportCount);
       }
     } catch (err) {
       console.error('[Datarova BG] Project error:', err.message);
-      results.push({ id: project.id, name: project.name, success: false, error: err.message });
+      results.push({ id: project.id, name: project.name, asin: project.asin, success: false, error: err.message });
       reportProgress('export', project.name, false, err.message, i + 1, exportCount);
     }
 
@@ -79,14 +79,20 @@ async function handleBulkExport(projects, tabId, returnUrl) {
   }
 
   // ── Phase 2: Download ──
-  const successCount = results.filter((r) => r.success).length;
+  const successfulExports = results.filter((r) => r.success);
+  const successCount = successfulExports.length;
+  const exportedProjects = successfulExports.map((r) => ({
+    name: r.name,
+    asin: r.asin || '',
+  }));
   console.log('[Datarova BG] === Phase 2: Download (' + successCount + ' successful exports) ===');
+  console.log('[Datarova BG] Exported projects:', JSON.stringify(exportedProjects));
 
   if (successCount > 0) {
     reportPhase('download', 0, successCount);
 
     try {
-      await downloadWithPolling(tabId, returnUrl, successCount);
+      await downloadWithPolling(tabId, returnUrl, successCount, exportedProjects);
     } catch (err) {
       console.error('[Datarova BG] Download phase error:', err.message);
       reportProgress('download', 'Download error', false, err.message, 0, successCount);
@@ -107,7 +113,7 @@ async function handleBulkExport(projects, tabId, returnUrl) {
 
 // ── Phase 2: Download with Polling ──────────────────────────────────────
 
-async function downloadWithPolling(tabId, returnUrl, expectedCount) {
+async function downloadWithPolling(tabId, returnUrl, expectedCount, exportedProjects) {
   const downloadUrl = buildDownloadUrl(returnUrl);
   const startTime = Date.now();
 
@@ -119,10 +125,11 @@ async function downloadWithPolling(tabId, returnUrl, expectedCount) {
     await sleep(PAGE_LOAD_WAIT_MS);
     await waitForContentScript(tabId);
 
-    // Check report status
+    // Check report status (filtered by exported projects)
     const status = await sendMessageToTab(tabId, {
       action: 'checkReportStatus',
       count: expectedCount,
+      exportedProjects: exportedProjects,
     });
     console.log('[Datarova BG] Report status:', JSON.stringify(status));
 
@@ -141,14 +148,15 @@ async function downloadWithPolling(tabId, returnUrl, expectedCount) {
       const dlResp = await sendMessageToTab(tabId, {
         action: 'downloadReports',
         count: expectedCount,
+        exportedProjects: exportedProjects,
       });
       console.log('[Datarova BG] Download response:', JSON.stringify(dlResp));
 
       if (dlResp && dlResp.success) {
         const r = dlResp.result;
         reportProgress('download',
-          'Downloaded ' + r.downloaded + ' of ' + r.total + ' reports',
-          true, null, r.downloaded, r.total);
+          'Downloaded ' + r.downloaded + ' of ' + r.matched + ' matched reports',
+          true, null, r.downloaded, expectedCount);
       } else {
         reportProgress('download', 'Download failed',
           false, dlResp?.error || 'Unknown', 0, expectedCount);
@@ -175,12 +183,13 @@ async function downloadWithPolling(tabId, returnUrl, expectedCount) {
   const dlResp = await sendMessageToTab(tabId, {
     action: 'downloadReports',
     count: expectedCount,
+    exportedProjects: exportedProjects,
   });
 
   if (dlResp && dlResp.success && dlResp.result.downloaded > 0) {
     reportProgress('download',
       'Downloaded ' + dlResp.result.downloaded + ' (timeout, some may not be ready)',
-      true, null, dlResp.result.downloaded, dlResp.result.total);
+      true, null, dlResp.result.downloaded, expectedCount);
   } else {
     reportProgress('download',
       'Reports not ready after ' + (REPORT_POLL_MAX_MS / 1000) + 's',

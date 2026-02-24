@@ -293,8 +293,9 @@
 
   // ── Download Page Handling (runs on /download-report page) ────────────────
 
-  async function downloadReadyReports(count) {
-    console.log('[Datarova Bulk] downloadReadyReports called, count:', count);
+  async function downloadReadyReports(count, exportedProjects) {
+    console.log('[Datarova Bulk] downloadReadyReports called, count:', count,
+      'exportedProjects:', JSON.stringify(exportedProjects));
 
     var table = await waitForElement('table.MuiTable-root, table', 8000);
     if (!table) {
@@ -312,19 +313,30 @@
       throw new Error('No report rows found');
     }
 
-    var targetRows = Array.from(rows).slice(0, count || rows.length);
-    targetRows.reverse();
-
+    // Scan ALL rows (not just first N) — match against exported projects
+    var allRows = Array.from(rows);
     var downloaded = 0;
     var skipped = 0;
+    var matched = 0;
 
-    for (var i = 0; i < targetRows.length; i++) {
-      var row = targetRows[i];
-      var rowText = (row.textContent || '').substring(0, 120).trim();
+    for (var i = 0; i < allRows.length; i++) {
+      var row = allRows[i];
+      var rowText = (row.textContent || '').trim();
+      var rowTextShort = rowText.substring(0, 150);
       var ready = isRowReady(row);
-      console.log('[Datarova Bulk]   row[' + i + '] ready=' + ready + ' text:', rowText);
+      var matchesProject = doesRowMatchExportedProject(row, exportedProjects);
+
+      console.log('[Datarova Bulk]   row[' + i + '] ready=' + ready +
+        ' match=' + matchesProject + ' text:', rowTextShort);
+
+      if (!matchesProject) {
+        continue; // not one of our exported projects
+      }
+
+      matched++;
 
       if (!ready) {
+        console.log('[Datarova Bulk]   row[' + i + '] matched but not ready, skipping');
         skipped++;
         continue;
       }
@@ -336,18 +348,54 @@
         continue;
       }
 
-      console.log('[Datarova Bulk]   row[' + i + '] clicking download button');
-      downloadBtn.click();
+      console.log('[Datarova Bulk]   row[' + i + '] clicking download button:',
+        'tag=' + downloadBtn.tagName,
+        'aria-label=' + downloadBtn.getAttribute('aria-label'),
+        'class=' + downloadBtn.className.substring(0, 50));
+      simulateClick(downloadBtn);
       downloaded++;
-      await sleep(1500);
+      await sleep(2000);
     }
 
     console.log('[Datarova Bulk] downloadReadyReports result: downloaded=' + downloaded +
-      ' skipped=' + skipped + ' total=' + targetRows.length);
-    return { downloaded: downloaded, skipped: skipped, total: targetRows.length };
+      ' skipped=' + skipped + ' matched=' + matched + ' totalRows=' + allRows.length);
+    return { downloaded: downloaded, skipped: skipped, matched: matched, total: allRows.length };
   }
 
-  function checkReportStatus(count) {
+  function doesRowMatchExportedProject(row, exportedProjects) {
+    // If no filter provided, match all rows
+    if (!exportedProjects || exportedProjects.length === 0) return true;
+
+    var rowText = (row.textContent || '').toLowerCase();
+
+    for (var i = 0; i < exportedProjects.length; i++) {
+      var project = exportedProjects[i];
+      // Match by project name (partial match, case insensitive)
+      if (project.name) {
+        var name = project.name.toLowerCase();
+        if (rowText.includes(name)) return true;
+        // Also try individual significant words (3+ chars) from the name
+        var words = name.split(/\s+/).filter(function (w) { return w.length >= 3; });
+        if (words.length >= 2) {
+          var allMatch = words.every(function (w) { return rowText.includes(w); });
+          if (allMatch) return true;
+        }
+      }
+      // Match by ASIN
+      if (project.asin && rowText.includes(project.asin.toLowerCase())) return true;
+    }
+
+    return false;
+  }
+
+  function simulateClick(el) {
+    // Use both native click and MouseEvent for maximum compatibility with React/MUI
+    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+    el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+  }
+
+  function checkReportStatus(count, exportedProjects) {
     var table = document.querySelector('table.MuiTable-root, table');
     if (!table) {
       console.log('[Datarova Bulk] checkReportStatus: no table found');
@@ -357,22 +405,26 @@
     var rows = table.querySelectorAll('tbody tr[id^="body-row-"]');
     if (rows.length === 0) rows = table.querySelectorAll('tbody tr');
 
-    var targetRows = Array.from(rows).slice(0, count || rows.length);
+    var allRows = Array.from(rows);
     var readyCount = 0;
     var pendingCount = 0;
+    var matchedCount = 0;
 
-    for (var i = 0; i < targetRows.length; i++) {
-      if (isRowReady(targetRows[i])) readyCount++;
-      else if (isRowPending(targetRows[i])) pendingCount++;
+    for (var i = 0; i < allRows.length; i++) {
+      if (!doesRowMatchExportedProject(allRows[i], exportedProjects)) continue;
+      matchedCount++;
+      if (isRowReady(allRows[i])) readyCount++;
+      else if (isRowPending(allRows[i])) pendingCount++;
     }
 
     console.log('[Datarova Bulk] checkReportStatus: ready=' + readyCount +
-      ' pending=' + pendingCount + ' total=' + targetRows.length);
+      ' pending=' + pendingCount + ' matched=' + matchedCount + ' totalRows=' + allRows.length);
 
     return {
       readyCount: readyCount,
       pendingCount: pendingCount,
-      totalCount: targetRows.length,
+      matchedCount: matchedCount,
+      totalCount: allRows.length,
     };
   }
 
@@ -402,34 +454,39 @@
   }
 
   function findDownloadButton(row) {
-    var cells = row.querySelectorAll('td');
-    if (cells.length === 0) return null;
-
-    var lastCell = cells[cells.length - 1];
-
-    var allBtns = lastCell.querySelectorAll(
-      'button, [role="button"], .MuiIconButton-root, a'
-    );
-    for (var b = 0; b < allBtns.length; b++) {
-      var label = (
-        allBtns[b].getAttribute('aria-label') ||
-        allBtns[b].title || ''
-      ).toLowerCase();
-      if (label.includes('download') || label.includes('export') || label.includes('save')) {
-        return allBtns[b];
+    // Primary: button with save-alt icon (the actual download button)
+    var saveAltBtn = row.querySelector('button img[src*="save-alt"]');
+    if (saveAltBtn) {
+      var btn = saveAltBtn.closest('button');
+      if (btn) {
+        console.log('[Datarova Bulk]   findDownloadButton: found save-alt button');
+        return btn;
       }
     }
 
-    if (allBtns.length >= 1) {
-      return allBtns[0];
+    // Secondary: button with aria-label="Download" anywhere in the row
+    var downloadBtns = row.querySelectorAll('button[aria-label="Download"], .MuiIconButton-root[aria-label="Download"]');
+    if (downloadBtns.length > 0) {
+      console.log('[Datarova Bulk]   findDownloadButton: found aria-label Download button');
+      return downloadBtns[0];
     }
 
-    if (cells.length >= 2) {
-      var secondLast = cells[cells.length - 2];
-      var btns2 = secondLast.querySelectorAll(
-        'button, [role="button"], .MuiIconButton-root, a'
-      );
-      if (btns2.length >= 1) return btns2[0];
+    // Tertiary: any button/icon-button in the last cell
+    var cells = row.querySelectorAll('td');
+    if (cells.length > 0) {
+      var lastCell = cells[cells.length - 1];
+      var allBtns = lastCell.querySelectorAll('button, .MuiIconButton-root');
+      for (var b = 0; b < allBtns.length; b++) {
+        var label = (allBtns[b].getAttribute('aria-label') || allBtns[b].title || '').toLowerCase();
+        if (label.includes('download') || label.includes('save') || label.includes('export')) {
+          console.log('[Datarova Bulk]   findDownloadButton: found labeled button in last cell');
+          return allBtns[b];
+        }
+      }
+      if (allBtns.length > 0) {
+        console.log('[Datarova Bulk]   findDownloadButton: fallback to first button in last cell');
+        return allBtns[0];
+      }
     }
 
     return null;
@@ -508,7 +565,7 @@
 
     if (message.action === 'checkReportStatus') {
       try {
-        var status = checkReportStatus(message.count);
+        var status = checkReportStatus(message.count, message.exportedProjects);
         sendResponse(status);
       } catch (err) {
         console.error('[Datarova Bulk] checkReportStatus failed:', err);
@@ -518,7 +575,7 @@
     }
 
     if (message.action === 'downloadReports') {
-      downloadReadyReports(message.count)
+      downloadReadyReports(message.count, message.exportedProjects)
         .then(function (result) { sendResponse({ success: true, result: result }); })
         .catch(function (err) { sendResponse({ success: false, error: err.message }); });
       return true;
