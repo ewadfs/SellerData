@@ -650,6 +650,58 @@
   }
 
   // ============================================================
+  // CLICK "APPLY" AFTER SELECTING AN ASIN
+  // ============================================================
+
+  /**
+   * After selecting an ASIN in the picker, Amazon requires clicking an
+   * "Apply" button to actually refresh the report data.  Without this
+   * the page still shows data for the *previous* ASIN and "Generate
+   * Download" would re-download the old report.
+   */
+  async function clickApplyButton() {
+    // Priority 1: Amazon's kat-button with label "Apply"
+    const katApply = querySelectorDeep('kat-button[label="Apply"]') ||
+                     querySelectorDeep('kat-button[label="apply"]');
+    if (katApply) {
+      const inner = katApply.shadowRoot?.querySelector('button') || katApply;
+      inner.click();
+      baLog('  Clicked Apply button (kat-button)');
+      await sleep(4000); // wait for data to refresh
+      return true;
+    }
+
+    // Priority 2: Any visible button/kat-button whose text is "Apply"
+    const allClickables = querySelectorAllDeep(
+      'button, kat-button, [role="button"], input[type="submit"], input[type="button"]'
+    );
+    for (const el of allClickables) {
+      const text = (el.textContent || el.value || el.getAttribute('label') || '').trim();
+      if (/^apply$/i.test(text) && isVisible(el)) {
+        const inner = el.shadowRoot?.querySelector('button') || el;
+        inner.click();
+        baLog('  Clicked Apply button');
+        await sleep(4000);
+        return true;
+      }
+    }
+
+    // Priority 3: Button whose data-test-id / data-testid contains "apply"
+    const testIdApply = querySelectorDeep('[data-test-id*="pply"]') ||
+                        querySelectorDeep('[data-testid*="pply"]');
+    if (testIdApply && isVisible(testIdApply)) {
+      const inner = testIdApply.shadowRoot?.querySelector('button') || testIdApply;
+      inner.click();
+      baLog('  Clicked Apply button (data-test-id)');
+      await sleep(4000);
+      return true;
+    }
+
+    baLog('  No Apply button found — page may auto-apply on selection', 'warn');
+    return false;
+  }
+
+  // ============================================================
   // TRIGGER DOWNLOAD
   // ============================================================
 
@@ -827,8 +879,11 @@
           return; // Page is reloading
         }
 
-        // Wait for data to load after selecting the ASIN
-        await sleep(3000);
+        // Click "Apply" so the page refreshes with the new ASIN's data
+        await clickApplyButton();
+
+        // Wait for data to finish loading after apply
+        await sleep(2000);
 
         // Trigger download
         const downloaded = await clickDownloadButton();
@@ -935,7 +990,10 @@
           saveResumeState(state.asins, globalIdx);
           return true;
         }
-        await sleep(3000);
+
+        // Click "Apply" so the page refreshes with the new ASIN's data
+        await clickApplyButton();
+        await sleep(2000);
 
         const dl = await clickDownloadButton();
         if (dl) {
