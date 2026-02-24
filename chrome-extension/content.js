@@ -297,18 +297,15 @@
     console.log('[Datarova Bulk] downloadReadyReports called, count:', count,
       'exportedProjects:', JSON.stringify(exportedProjects));
 
-    var table = await waitForElement('table.MuiTable-root, table', 8000);
-    if (!table) {
-      console.log('[Datarova Bulk] downloadReadyReports: no table found on page');
+    var container = await waitForElement(
+      'table.MuiTable-root, .MuiDataGrid-root, table, [role="grid"]', 8000);
+    if (!container) {
+      console.log('[Datarova Bulk] downloadReadyReports: no table/grid found on page');
       throw new Error('Download report table not found');
     }
 
-    var rows = table.querySelectorAll('tbody tr[id^="body-row-"]');
-    console.log('[Datarova Bulk] downloadReadyReports: body-row- rows:', rows.length);
-    if (rows.length === 0) {
-      rows = table.querySelectorAll('tbody tr');
-      console.log('[Datarova Bulk] downloadReadyReports: fallback tbody tr rows:', rows.length);
-    }
+    var rows = findTableRows(container);
+    console.log('[Datarova Bulk] downloadReadyReports: found', rows.length, 'rows');
     if (rows.length === 0) {
       throw new Error('No report rows found');
     }
@@ -520,19 +517,40 @@
   }
 
   async function checkReportStatus(count, exportedProjects) {
-    var table = await waitForElement('table.MuiTable-root, table', 8000);
-    if (!table) {
-      console.log('[Datarova Bulk] checkReportStatus: no table found on page');
+    // Try multiple container selectors — MUI DataGrid uses divs, not <table>
+    var container = await waitForElement(
+      'table.MuiTable-root, .MuiDataGrid-root, table, [role="grid"]', 8000);
+    if (!container) {
+      console.log('[Datarova Bulk] checkReportStatus: no table/grid found on page');
+      // Debug: log what IS on the page
+      var allTables = document.querySelectorAll('table');
+      var allGrids = document.querySelectorAll('[role="grid"], [role="table"]');
+      console.log('[Datarova Bulk]   debug: tables=' + allTables.length +
+        ' grids=' + allGrids.length);
       return { readyCount: 0, pendingCount: 0, totalCount: 0 };
     }
 
-    // Wait for rows to actually populate (table shell loads before data)
+    console.log('[Datarova Bulk] checkReportStatus: found container:', container.tagName,
+      'classes:', (container.className || '').substring(0, 100));
+
+    // Wait for rows — try multiple selectors for different table implementations
     var rows;
+
     for (var w = 0; w < 16; w++) {
-      rows = table.querySelectorAll('tbody tr[id^="body-row-"]');
-      if (rows.length === 0) rows = table.querySelectorAll('tbody tr');
+      rows = findTableRows(container);
       if (rows.length > 0) break;
       console.log('[Datarova Bulk] checkReportStatus: waiting for rows... attempt', w + 1);
+      if (w === 0) {
+        // Debug: log container's first-level child structure
+        var kids = container.children;
+        var kidInfo = [];
+        for (var k = 0; k < Math.min(5, kids.length); k++) {
+          kidInfo.push(kids[k].tagName + '.' + (kids[k].className || '').substring(0, 50));
+        }
+        console.log('[Datarova Bulk]   container children:', kidInfo.join(', '));
+        console.log('[Datarova Bulk]   container innerHTML preview:',
+          container.innerHTML.substring(0, 500));
+      }
       await sleep(500);
     }
 
@@ -542,7 +560,7 @@
 
     // Log first 3 rows for debugging
     for (var d = 0; d < Math.min(3, allRows.length); d++) {
-      var cells = allRows[d].querySelectorAll('td');
+      var cells = allRows[d].querySelectorAll('td, [role="cell"], [data-field]');
       var cellTexts = [];
       for (var c = 0; c < cells.length; c++) {
         cellTexts.push((cells[c].textContent || '').trim().substring(0, 40));
@@ -572,8 +590,34 @@
     };
   }
 
-  function isRowReady(row) {
+  // Find table rows using multiple selectors (handles MUI Table, DataGrid, etc.)
+  function findTableRows(container) {
+    var selectors = [
+      'tbody tr[id^="body-row-"]',
+      'tbody tr',
+      '.MuiDataGrid-row',
+      '[role="row"]:not(:first-child)',
+      'div[data-rowindex]',
+      'tr',
+    ];
+    for (var s = 0; s < selectors.length; s++) {
+      var rows = container.querySelectorAll(selectors[s]);
+      if (rows.length > 0) return rows;
+    }
+    // Try document-wide
+    var docRows = document.querySelectorAll('.MuiDataGrid-row, [data-rowindex], tbody tr');
+    return docRows;
+  }
+
+  function getCells(row) {
     var cells = row.querySelectorAll('td');
+    if (cells.length === 0) cells = row.querySelectorAll('[role="cell"], [data-field]');
+    if (cells.length === 0) cells = row.children;
+    return cells;
+  }
+
+  function isRowReady(row) {
+    var cells = getCells(row);
     for (var c = 0; c < cells.length; c++) {
       var text = (cells[c].textContent || '').trim().toLowerCase();
       if (text === 'ready' || text.includes('ready')) {
@@ -584,17 +628,9 @@
   }
 
   function isRowPending(row) {
-    var cells = row.querySelectorAll('td');
-    for (var c = 0; c < cells.length; c++) {
-      var text = (cells[c].textContent || '').trim().toLowerCase();
-      if (text === 'pending' || text.includes('pending') ||
-          text === 'processing' || text.includes('processing') ||
-          text === 'generating' || text.includes('generating') ||
-          text === 'queued' || text.includes('queued')) {
-        return true;
-      }
-    }
-    return false;
+    var text = (row.textContent || '').trim().toLowerCase();
+    return text.includes('pending') || text.includes('processing') ||
+           text.includes('generating') || text.includes('queued');
   }
 
   function findDownloadButton(row) {
