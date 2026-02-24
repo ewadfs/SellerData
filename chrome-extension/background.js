@@ -1,60 +1,166 @@
 /**
  * Datarova Bulk Report Downloader - Background Service Worker
  *
- * Manages download operations by coordinating between the popup and
- * content scripts. Handles sequential report downloads with rate limiting
- * to avoid overwhelming the Datarova servers.
+ * Orchestrates bulk export by navigating the tab to each project's ranks page
+ * and triggering Export > Daily Ranks via the content script.
  */
 
-const DOWNLOAD_DELAY_MS = 2000; // Delay between downloads to be respectful
+const EXPORT_DELAY_MS = 3000; // Delay between exports to avoid overwhelming Datarova
+const PAGE_LOAD_WAIT_MS = 4000; // Wait for SPA content to render after navigation
 
 // ── Message Handling ──────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'downloadReport') {
-    handleDownloadReport(message.params)
-      .then((result) => sendResponse(result))
+  if (message.action === 'bulkExport') {
+    handleBulkExport(message.projects, message.tabId, message.returnUrl)
+      .then((results) => sendResponse({ success: true, results }))
       .catch((err) => sendResponse({ success: false, error: err.message }));
     return true; // async response
   }
   return false;
 });
 
-// ── Download Handler ──────────────────────────────────────────────────────
+// ── Bulk Export Orchestrator ──────────────────────────────────────────────
 
-async function handleDownloadReport(params) {
-  const { reportType, marketplace, projectId, format, dateRange } = params;
+async function handleBulkExport(projects, tabId, returnUrl) {
+  const results = [];
 
+  for (let i = 0; i < projects.length; i++) {
+    const project = projects[i];
+
+    try {
+      // Build the ranks page URL for this project
+      const url = buildRanksUrl(returnUrl, project.id, project.asin);
+
+      // Navigate the tab to the project's ranks page
+      await navigateTab(tabId, url);
+
+      // Wait for the SPA to render
+      await sleep(PAGE_LOAD_WAIT_MS);
+
+      // Inject content script (may already be auto-injected via manifest)
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ['content.js'],
+        });
+      } catch (e) {
+        // Content script may already be loaded, that's fine
+      }
+      await sleep(500);
+
+      // Tell the content script to trigger Export > Daily Ranks
+      const response = await sendMessageToTab(tabId, { action: 'triggerExport' });
+
+      if (response && response.success) {
+        results.push({ id: project.id, name: project.name, success: true });
+        reportProgress(project.name, true, null, i + 1, projects.length);
+      } else {
+        const error = response?.error || 'Export failed';
+        results.push({ id: project.id, name: project.name, success: false, error });
+        reportProgress(project.name, false, error, i + 1, projects.length);
+      }
+    } catch (err) {
+      results.push({ id: project.id, name: project.name, success: false, error: err.message });
+      reportProgress(project.name, false, err.message, i + 1, projects.length);
+    }
+
+    // Delay between exports
+    if (i < projects.length - 1) {
+      await sleep(EXPORT_DELAY_MS);
+    }
+  }
+
+  // Navigate back to the projects page when done
+  if (returnUrl) {
+    try {
+      await navigateTab(tabId, returnUrl);
+    } catch (e) {
+      // Best effort
+    }
+  }
+
+  return results;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+
+/**
+ * Build the URL for a project's ranks page.
+ * Uses the origin from the return URL (app.datarova.com).
+ */
+function buildRanksUrl(returnUrl, projectId, asin) {
+  let origin = 'https://app.datarova.com';
   try {
-    // Find the active Datarova tab
-    const tabs = await chrome.tabs.query({ url: 'https://*.datarova.com/*' });
-    if (tabs.length === 0) {
-      throw new Error('No Datarova tab found. Please open datarova.com first.');
+    origin = new URL(returnUrl).origin;
+  } catch (e) {
+    // Use default
+  }
+  let url = `${origin}/projects/${projectId}`;
+  if (asin) {
+    url += `/ranks/${asin}`;
+  }
+  return url;
+}
+
+/**
+ * Navigate a tab to a URL and wait for it to finish loading.
+ */
+function navigateTab(tabId, url) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(listener);
+      reject(new Error('Navigation timeout'));
+    }, 30000);
+
+    function listener(updatedTabId, changeInfo) {
+      if (updatedTabId === tabId && changeInfo.status === 'complete') {
+        chrome.tabs.onUpdated.removeListener(listener);
+        clearTimeout(timeout);
+        resolve();
+      }
     }
 
-    const tabId = tabs[0].id;
+    chrome.tabs.onUpdated.addListener(listener);
+    chrome.tabs.update(tabId, { url });
+  });
+}
 
-    // Send download command to the content script
-    const response = await chrome.tabs.sendMessage(tabId, {
-      action: 'triggerDownload',
-      params: { reportType, marketplace, projectId, format, dateRange },
-    });
-
-    if (!response || !response.success) {
-      throw new Error(response?.error || 'Download failed');
+/**
+ * Send a message to a content script in a tab, with retry logic.
+ */
+async function sendMessageToTab(tabId, message) {
+  const MAX_RETRIES = 3;
+  for (let i = 0; i < MAX_RETRIES; i++) {
+    try {
+      return await chrome.tabs.sendMessage(tabId, message);
+    } catch (err) {
+      if (i < MAX_RETRIES - 1) {
+        await sleep(1000);
+      } else {
+        throw err;
+      }
     }
-
-    // Respectful delay between downloads
-    await sleep(DOWNLOAD_DELAY_MS);
-
-    return { success: true };
-  } catch (err) {
-    console.error('Download error:', err);
-    return { success: false, error: err.message };
   }
 }
 
-// ── Utility Functions ─────────────────────────────────────────────────────
+/**
+ * Send progress updates to the popup (if it's still open).
+ */
+function reportProgress(projectName, success, error, completed, total) {
+  try {
+    chrome.runtime.sendMessage({
+      action: 'exportProgress',
+      projectName,
+      success,
+      error,
+      completed,
+      total,
+    });
+  } catch (e) {
+    // Popup may have been closed, ignore
+  }
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -64,8 +170,8 @@ function sleep(ms) {
 
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
-    console.log('Datarova Bulk Downloader installed successfully.');
+    console.log('Datarova Bulk Downloader installed.');
   } else if (details.reason === 'update') {
-    console.log(`Datarova Bulk Downloader updated to version ${chrome.runtime.getManifest().version}`);
+    console.log('Datarova Bulk Downloader updated to v' + chrome.runtime.getManifest().version);
   }
 });

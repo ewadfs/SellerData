@@ -1,371 +1,270 @@
 /**
  * Datarova Bulk Report Downloader - Content Script
  *
- * Runs on datarova.com pages. Detects available projects and marketplaces
- * from the page DOM, and handles triggering downloads via the site's UI.
+ * Runs on app.datarova.com pages. On the /projects page it detects project
+ * cards. On a project's /ranks page it triggers the Export > Daily Ranks flow.
  */
 
 (function () {
   'use strict';
 
-  // ── Project Detection ───────────────────────────────────────────────────
+  // ── Project Detection (runs on /projects page) ───────────────────────────
 
   /**
-   * Scan the page for project listings using multiple broad strategies
-   * to handle various DOM structures and SPA frameworks.
+   * Detect projects from the card grid on the Datarova projects page.
+   * Each card contains a link like /projects/<id>/ranks/<asin>, a project
+   * name, a marketplace flag image, and stats.
    */
   function detectProjects() {
     const projects = [];
     const seen = new Set();
 
-    function addProject(id, name) {
-      if (!id || seen.has(id)) return;
-      // Skip non-project path segments
-      if (['new', 'create', 'edit', 'settings', 'delete'].includes(id)) return;
-      // Skip pure numeric values that look like pagination (10, 25, 50, 100, 250, 500)
-      if (/^\d+$/.test(id) && [10, 25, 50, 100, 250, 500].includes(Number(id))) return;
-      seen.add(id);
-      projects.push({ id, name: name || `Project ${id}` });
-    }
+    // Find all links that point to project subpages
+    document.querySelectorAll('a[href*="/projects/"]').forEach((a) => {
+      const href = a.href || '';
+      // Match /projects/<id> with optional /ranks/<asin> or other subpath
+      const match = href.match(/\/projects\/(\d+)(?:\/\w+\/([A-Z0-9]{10}))?/);
+      if (!match) return;
 
-    /**
-     * Extract the project name from a link element by checking the link text,
-     * then walking up to find a meaningful name from parent row/card elements.
-     */
-    function extractProjectName(linkEl) {
-      // First try the link's own text
-      const linkText = linkEl.textContent?.trim().split('\n')[0]?.trim() || '';
-      // If the link text is meaningful (not just the ID or empty), use it
-      if (linkText && !/^\d+$/.test(linkText) && linkText.length > 2) {
-        return linkText;
-      }
+      const projectId = match[1];
+      if (seen.has(projectId)) return;
+      seen.add(projectId);
 
-      // Walk up to find a parent row, card, or list-item
-      let parent = linkEl.parentElement;
-      for (let i = 0; i < 6 && parent; i++) {
-        const tag = parent.tagName?.toLowerCase();
-        const cls = parent.className || '';
+      const asin = match[2] || extractAsinFromText(a);
 
-        // Check if this is a row, card, or list item container
-        if (tag === 'tr' || tag === 'li' ||
-            /row|card|item|project/i.test(cls) ||
-            parent.getAttribute('role') === 'row') {
-          // Look for a name/title element inside
-          const nameEl = parent.querySelector(
-            '[class*="name"], [class*="title"], [class*="label"], ' +
-            'h1, h2, h3, h4, h5, td:first-child, span:first-child'
-          );
-          const nameText = nameEl?.textContent?.trim().split('\n')[0]?.trim() || '';
-          if (nameText && nameText.length > 2) {
-            return nameText;
-          }
-          // Fall back to first cell or first meaningful text
-          const firstCell = parent.querySelector('td, [class*="cell"]');
-          if (firstCell) {
-            const cellText = firstCell.textContent?.trim().split('\n')[0]?.trim() || '';
-            if (cellText && cellText.length > 2) return cellText;
-          }
-        }
-        parent = parent.parentElement;
-      }
+      // Walk up the DOM to find the enclosing card element
+      const card = findCardContainer(a, projectId);
 
-      return linkText;
-    }
+      // Extract info from the card
+      const name = extractNameFromCard(card, asin);
+      const marketplace = extractMarketplace(card);
 
-    // Strategy 1: Find <a> links pointing to project pages
-    // Matches /projects/<id>, /project/<id>, ?project=<id>
-    document.querySelectorAll('a[href]').forEach((a) => {
-      const href = a.href || a.getAttribute('href') || '';
-
-      // Match /projects/<id> or /project/<id>
-      let match = href.match(/\/projects?\/([a-zA-Z0-9_-]+)/);
-      if (match) {
-        const name = extractProjectName(a);
-        addProject(match[1], name);
-        return;
-      }
-
-      // Match ?project=<id> or &project_id=<id>
-      match = href.match(/[?&]project[_-]?(?:id)?=([a-zA-Z0-9_-]+)/);
-      if (match) {
-        const name = extractProjectName(a);
-        addProject(match[1], name);
-      }
-    });
-
-    // Strategy 2: Look for data attributes containing project IDs
-    document.querySelectorAll(
-      '[data-project-id], [data-project], [data-id], [data-row-key]'
-    ).forEach((el) => {
-      const id = el.dataset.projectId || el.dataset.project || el.dataset.id || el.dataset.rowKey;
-      const name = el.querySelector('a, [class*="name"], [class*="title"], h2, h3, h4')
-        ?.textContent?.trim() || el.textContent?.trim().split('\n')[0]?.trim() || '';
-      addProject(id, name);
-    });
-
-    // Strategy 3: Scan table rows on project-related pages
-    if (window.location.pathname.includes('project') || window.location.href.includes('project')) {
-      document.querySelectorAll('table tbody tr, [role="row"]').forEach((row) => {
-        const link = row.querySelector('a[href]');
-        if (link) {
-          const href = link.href || '';
-          const match = href.match(/\/projects?\/([a-zA-Z0-9_-]+)/);
-          if (match) {
-            const name = extractProjectName(link);
-            addProject(match[1], name);
-          }
-        }
+      projects.push({
+        id: projectId,
+        name: name || 'Project ' + projectId,
+        asin: asin || '',
+        marketplace: marketplace || 'US',
       });
-
-      // Also look for card/grid/list layouts
-      document.querySelectorAll(
-        '[class*="project"], [class*="card"], [class*="list-item"]'
-      ).forEach((el) => {
-        const link = el.querySelector('a[href]');
-        if (link) {
-          const href = link.href || '';
-          const match = href.match(/\/projects?\/([a-zA-Z0-9_-]+)/);
-          if (match) {
-            const name = el.querySelector(
-              'h2, h3, h4, [class*="name"], [class*="title"]'
-            )?.textContent?.trim() || extractProjectName(link);
-            addProject(match[1], name);
-          }
-        }
-      });
-    }
-
-    // Strategy 4: Look for project-specific selector dropdowns
-    document.querySelectorAll(
-      'select[name*="project"], select[id*="project"], ' +
-      '#project-select, .project-selector select, [class*="project"] select'
-    ).forEach((select) => {
-      Array.from(select.options).forEach((option) => {
-        if (option.value && option.value !== '' && option.value !== 'all') {
-          const text = option.textContent?.trim() || '';
-          if (text && text.length > 1) {
-            addProject(option.value, text);
-          }
-        }
-      });
-    });
-
-    // Strategy 5: Check Next.js / Nuxt / framework state
-    try {
-      const stateObjects = [window.__NEXT_DATA__, window.__NUXT__, window.__APP_DATA__];
-      stateObjects.forEach((state) => {
-        if (state) findProjectsInObject(state, addProject);
-      });
-    } catch (e) {
-      // Ignore errors accessing window properties
-    }
-
-    // Strategy 6: Parse embedded JSON/scripts for project arrays
-    document.querySelectorAll('script:not([src])').forEach((script) => {
-      try {
-        const content = script.textContent;
-        const patterns = [
-          /projects\s*[:=]\s*(\[[\s\S]*?\])/,
-          /projectList\s*[:=]\s*(\[[\s\S]*?\])/,
-          /"projects"\s*:\s*(\[[\s\S]*?\])/,
-        ];
-        for (const pattern of patterns) {
-          const match = content.match(pattern);
-          if (match) {
-            const parsed = JSON.parse(match[1]);
-            parsed.forEach((p) => {
-              addProject(
-                String(p.id || p.project_id || p._id || ''),
-                p.name || p.title || ''
-              );
-            });
-          }
-        }
-      } catch (e) {
-        // Ignore parse errors
-      }
     });
 
     return projects;
   }
 
   /**
-   * Recursively search an object tree for arrays of project-like objects.
+   * Walk up from a link element to find the enclosing card container.
+   * Stop when we find an element that contains exactly one project link
+   * (so we don't overshoot to a parent grid that holds multiple cards).
    */
-  function findProjectsInObject(obj, addProject, depth) {
-    if (depth === void 0) depth = 0;
-    if (depth > 8 || !obj || typeof obj !== 'object') return;
-    if (Array.isArray(obj)) {
-      obj.forEach((item) => {
-        if (item && typeof item === 'object' &&
-            (item.id || item.project_id || item._id) &&
-            (item.name || item.title || item.project_name)) {
-          addProject(
-            String(item.id || item.project_id || item._id),
-            item.name || item.title || item.project_name
-          );
-        }
-      });
+  function findCardContainer(el, projectId) {
+    let current = el;
+    for (let i = 0; i < 10 && current.parentElement; i++) {
+      current = current.parentElement;
+      // A card typically contains an image and keyword/ASIN stats
+      const text = current.textContent || '';
+      if (current.querySelector('img') &&
+          (text.includes('Keyword') || text.includes('ASIN'))) {
+        // Verify this is a single-project card, not the whole grid
+        const links = current.querySelectorAll('a[href*="/projects/"]');
+        const uniqueIds = new Set();
+        links.forEach((l) => {
+          const m = (l.href || '').match(/\/projects\/(\d+)/);
+          if (m) uniqueIds.add(m[1]);
+        });
+        if (uniqueIds.size <= 1) return current;
+      }
     }
-    try {
-      Object.values(obj).forEach((v) => findProjectsInObject(v, addProject, depth + 1));
-    } catch (e) {
-      // Ignore circular reference or access errors
-    }
+    return el.parentElement || el;
   }
-
-  // ── Download Triggering ─────────────────────────────────────────────────
 
   /**
-   * Trigger a report download by interacting with the Datarova page UI.
-   * This function navigates to the appropriate tool page, sets filters,
-   * and triggers the export/download.
+   * Extract the project name from a card element.
+   * The card text typically looks like: "Spoon Rest 🇺🇸 B0874S275K 2 ASINs 130 Keywords"
+   * We want just the name portion (before the ASIN).
    */
-  async function triggerDownload(params) {
-    const { reportType, marketplace, projectId, format, dateRange } = params;
+  function extractNameFromCard(card, asin) {
+    if (!card) return '';
 
-    // Build the target URL for the report
-    const baseUrl = buildReportUrl(reportType, marketplace, projectId);
-
-    // Navigate to the report page if needed
-    if (window.location.href !== baseUrl) {
-      window.location.href = baseUrl;
-      // Wait for page load
-      await waitForPageLoad();
+    // Strategy 1: Split card text at the ASIN to isolate the name
+    if (asin) {
+      const fullText = card.textContent || '';
+      const idx = fullText.indexOf(asin);
+      if (idx > 0) {
+        let name = fullText.substring(0, idx)
+          .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '') // remove flag emojis
+          .replace(/\s+/g, ' ')
+          .trim();
+        // Remove any trailing non-letter chars (flag remnants, etc.)
+        name = name.replace(/[^a-zA-Z0-9)]+$/, '').trim();
+        if (name.length > 1) return name;
+      }
     }
 
-    // Wait for data table to render
-    await waitForElement('[class*="table"], [class*="data"], [class*="grid"]', 10000);
+    // Strategy 2: Look for heading or prominent text elements
+    const headings = card.querySelectorAll('h1, h2, h3, h4, h5, h6');
+    for (const h of headings) {
+      const text = h.textContent?.trim();
+      if (text && text.length > 1 && !/^B0[A-Z0-9]{8}$/.test(text)) {
+        return text;
+      }
+    }
 
-    // Set date range if applicable
-    await setDateRange(dateRange);
+    // Strategy 3: Find the first meaningful text node (not an ASIN or stat)
+    const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const text = walker.currentNode.textContent.trim();
+      if (text.length > 2 &&
+          !/^B0[A-Z0-9]{8}/.test(text) &&
+          !/^\d+\s*(ASIN|Keyword)/i.test(text) &&
+          !/^(Export|Delete|Edit|Settings)/i.test(text)) {
+        return text;
+      }
+    }
 
-    // Trigger the download/export button
-    const downloaded = await clickDownloadButton(format);
-
-    return downloaded;
+    return '';
   }
 
-  function buildReportUrl(reportType, marketplace, projectId) {
-    const toolPaths = {
-      'keyword-spy': '/keyword-spy',
-      'asin-insights': '/asin-insights',
-      'keyword-monitor': '/keyword-monitor',
-      'keyword-tracker': '/keyword-tracker',
-      'competitor-tracking': '/competitor-tracking',
-      'trends': '/trends',
+  /**
+   * Extract an ASIN (B0XXXXXXXXX format) from element text.
+   */
+  function extractAsinFromText(el) {
+    const text = (el.textContent || '') + ' ' + (el.href || '');
+    const match = text.match(/\b(B0[A-Z0-9]{8})\b/);
+    return match ? match[1] : null;
+  }
+
+  /**
+   * Detect marketplace from flag images or emojis in a card element.
+   */
+  function extractMarketplace(card) {
+    if (!card) return null;
+
+    // Check for flag images (common pattern: /flags/us.svg, /us.png, alt="US")
+    const imgs = card.querySelectorAll('img');
+    for (const img of imgs) {
+      const src = (img.src || '').toLowerCase();
+      const alt = (img.alt || '').toLowerCase();
+      const combined = src + ' ' + alt;
+
+      const codes = {
+        '/us': 'US', '_us': 'US', 'united states': 'US',
+        '/ca': 'CA', '_ca': 'CA', 'canada': 'CA',
+        '/mx': 'MX', '_mx': 'MX', 'mexico': 'MX',
+        '/uk': 'UK', '_uk': 'UK', '/gb': 'UK', '_gb': 'UK', 'united kingdom': 'UK',
+        '/de': 'DE', '_de': 'DE', 'germany': 'DE',
+        '/fr': 'FR', '_fr': 'FR', 'france': 'FR',
+        '/it': 'IT', '_it': 'IT', 'italy': 'IT',
+        '/es': 'ES', '_es': 'ES', 'spain': 'ES',
+        '/jp': 'JP', '_jp': 'JP', 'japan': 'JP',
+        '/au': 'AU', '_au': 'AU', 'australia': 'AU',
+        '/in': 'IN', '_in': 'IN', 'india': 'IN',
+      };
+
+      for (const [pattern, code] of Object.entries(codes)) {
+        if (combined.includes(pattern)) return code;
+      }
+    }
+
+    // Check for flag emojis
+    const text = card.textContent || '';
+    const flagMap = {
+      '\u{1F1FA}\u{1F1F8}': 'US', '\u{1F1E8}\u{1F1E6}': 'CA',
+      '\u{1F1F2}\u{1F1FD}': 'MX', '\u{1F1EC}\u{1F1E7}': 'UK',
+      '\u{1F1E9}\u{1F1EA}': 'DE', '\u{1F1EB}\u{1F1F7}': 'FR',
+      '\u{1F1EE}\u{1F1F9}': 'IT', '\u{1F1EA}\u{1F1F8}': 'ES',
+      '\u{1F1EF}\u{1F1F5}': 'JP', '\u{1F1E6}\u{1F1FA}': 'AU',
+      '\u{1F1EE}\u{1F1F3}': 'IN',
     };
-
-    // Use the current origin (app.datarova.com) instead of hardcoding
-    const origin = window.location.origin;
-    let url = `${origin}${toolPaths[reportType] || '/keyword-spy'}`;
-    const queryParams = [];
-
-    if (marketplace) queryParams.push(`marketplace=${encodeURIComponent(marketplace)}`);
-    if (projectId) queryParams.push(`project=${encodeURIComponent(projectId)}`);
-
-    if (queryParams.length > 0) {
-      url += `?${queryParams.join('&')}`;
+    for (const [emoji, code] of Object.entries(flagMap)) {
+      if (text.includes(emoji)) return code;
     }
 
-    return url;
+    return null;
   }
 
-  async function setDateRange(dateRange) {
-    if (!dateRange) return;
+  // ── Export Triggering (runs on /projects/<id>/ranks/<asin> page) ──────────
 
-    const dateSelector = document.querySelector(
-      '[class*="date-range"], [class*="dateRange"], input[type="date"], .date-picker'
+  /**
+   * Trigger Export > Daily Ranks on a project's ranks page.
+   * The page uses Material UI components for the export menu.
+   */
+  async function triggerExport() {
+    // Step 1: Find the "Export" button
+    const exportBtn = findButtonByText('export');
+    if (!exportBtn) {
+      throw new Error('Export button not found on page');
+    }
+
+    // Step 2: Click to open the MUI dropdown menu
+    exportBtn.click();
+    await sleep(800);
+
+    // Step 3: Wait for the MUI menu/popover to appear
+    const menu = await waitForElement(
+      '[role="menu"], [role="presentation"] ul, ' +
+      '.MuiMenu-list, .MuiPopover-paper, .MuiPaper-root ul',
+      5000
     );
 
-    if (dateSelector) {
-      if (dateRange.type === 'custom' && dateRange.start && dateRange.end) {
-        // Try to set custom date inputs
-        const startInput = document.querySelector('input[name*="start"], input[placeholder*="Start"]');
-        const endInput = document.querySelector('input[name*="end"], input[placeholder*="End"]');
-        if (startInput) setNativeValue(startInput, dateRange.start);
-        if (endInput) setNativeValue(endInput, dateRange.end);
-      } else if (dateRange.type === 'relative') {
-        // Try to find and click the appropriate preset button
-        const presetButtons = document.querySelectorAll('[class*="preset"], [class*="range-option"] button');
-        const daysLabel = getDaysLabel(dateRange.days);
-        for (const btn of presetButtons) {
-          if (btn.textContent.toLowerCase().includes(daysLabel)) {
-            btn.click();
-            await sleep(500);
-            break;
-          }
-        }
-      }
+    if (!menu) {
+      throw new Error('Export menu did not open');
     }
-  }
 
-  function getDaysLabel(days) {
-    switch (days) {
-      case 30: return '30';
-      case 90: return '90';
-      case 180: return '6 month';
-      case 365: return '12 month';
-      default: return String(days);
-    }
-  }
+    await sleep(300);
 
-  async function clickDownloadButton(format) {
-    // Look for download/export buttons
-    const downloadBtn = document.querySelector(
-      'button[class*="download"], button[class*="export"], ' +
-      'a[class*="download"], a[class*="export"], ' +
-      '[data-action="download"], [data-action="export"], ' +
-      'button[title*="Download"], button[title*="Export"]'
+    // Step 4: Find and click "Daily Ranks" menu item
+    const menuItems = document.querySelectorAll(
+      '[role="menuitem"], .MuiMenuItem-root, ' +
+      '.MuiListItem-root, [role="presentation"] li'
     );
 
-    if (!downloadBtn) {
-      throw new Error('Download button not found on page');
-    }
-
-    // If there's a format selector, try to set it
-    if (format) {
-      const formatSelector = document.querySelector(
-        'select[name*="format"], [class*="format-selector"]'
-      );
-      if (formatSelector) {
-        setNativeValue(formatSelector, format);
-        await sleep(300);
+    let dailyRanksItem = null;
+    for (const item of menuItems) {
+      const text = item.textContent?.trim().toLowerCase() || '';
+      if (text.includes('daily') && text.includes('rank')) {
+        dailyRanksItem = item;
+        break;
       }
     }
 
-    downloadBtn.click();
+    if (!dailyRanksItem) {
+      // Close the menu if we can't find Daily Ranks
+      document.body.click();
+      throw new Error('Daily Ranks option not found in export menu');
+    }
 
-    // Wait for download to start
-    await sleep(2000);
+    dailyRanksItem.click();
+
+    // Step 5: Wait for the download to initiate
+    await sleep(3000);
     return true;
+  }
+
+  /**
+   * Find a button element by its visible text content.
+   */
+  function findButtonByText(searchText) {
+    const candidates = document.querySelectorAll(
+      'button, [role="button"], a.MuiButtonBase-root, .MuiButton-root'
+    );
+    for (const btn of candidates) {
+      const text = btn.textContent?.trim().toLowerCase() || '';
+      if (text.includes(searchText.toLowerCase())) {
+        return btn;
+      }
+    }
+    return null;
   }
 
   // ── Utility Functions ───────────────────────────────────────────────────
 
-  function setNativeValue(element, value) {
-    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLInputElement.prototype, 'value'
-    )?.set || Object.getOwnPropertyDescriptor(
-      window.HTMLSelectElement.prototype, 'value'
-    )?.set;
-
-    if (nativeInputValueSetter) {
-      nativeInputValueSetter.call(element, value);
-    } else {
-      element.value = value;
-    }
-    element.dispatchEvent(new Event('input', { bubbles: true }));
-    element.dispatchEvent(new Event('change', { bubbles: true }));
-  }
-
-  function waitForElement(selector, timeout = 5000) {
-    return new Promise((resolve) => {
-      const el = document.querySelector(selector);
+  function waitForElement(selector, timeout) {
+    if (timeout === undefined) timeout = 5000;
+    return new Promise(function (resolve) {
+      var el = document.querySelector(selector);
       if (el) return resolve(el);
 
-      const observer = new MutationObserver(() => {
-        const found = document.querySelector(selector);
+      var observer = new MutationObserver(function () {
+        var found = document.querySelector(selector);
         if (found) {
           observer.disconnect();
           resolve(found);
@@ -374,40 +273,30 @@
 
       observer.observe(document.body, { childList: true, subtree: true });
 
-      setTimeout(() => {
+      setTimeout(function () {
         observer.disconnect();
         resolve(null);
       }, timeout);
     });
   }
 
-  function waitForPageLoad() {
-    return new Promise((resolve) => {
-      if (document.readyState === 'complete') {
-        resolve();
-      } else {
-        window.addEventListener('load', resolve, { once: true });
-      }
-    });
-  }
-
   function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
   }
 
   // ── Message Handling ────────────────────────────────────────────────────
 
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
     if (message.action === 'getProjects') {
-      const projects = detectProjects();
-      sendResponse({ projects });
+      var projects = detectProjects();
+      sendResponse({ projects: projects });
       return true;
     }
 
-    if (message.action === 'triggerDownload') {
-      triggerDownload(message.params)
-        .then(() => sendResponse({ success: true }))
-        .catch((err) => sendResponse({ success: false, error: err.message }));
+    if (message.action === 'triggerExport') {
+      triggerExport()
+        .then(function () { sendResponse({ success: true }); })
+        .catch(function (err) { sendResponse({ success: false, error: err.message }); });
       return true; // async response
     }
 

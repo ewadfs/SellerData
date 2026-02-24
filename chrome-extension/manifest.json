@@ -5,6 +5,7 @@
   "description": "Bulk download keyword and ASIN reports from Datarova.com across multiple projects and marketplaces",
   "permissions": [
     "activeTab",
+    "tabs",
     "downloads",
     "storage",
     "scripting"

@@ -1,20 +1,19 @@
 /**
  * Datarova Bulk Report Downloader - Popup Script
  *
- * Handles UI interactions, communicates with the content script to detect
- * projects, and orchestrates bulk report downloads via the background script.
+ * Simplified workflow: detect projects from the Datarova projects page,
+ * filter by marketplace, and bulk export Daily Ranks with one button.
  */
 
-const MARKETPLACES = ['US', 'CA', 'MX', 'UK', 'DE', 'FR', 'IT', 'ES'];
-
 // DOM elements
-const reportTypeSelect = document.getElementById('report-type');
-const dateRangeSelect = document.getElementById('date-range');
-const customDates = document.getElementById('custom-dates');
-const dateStart = document.getElementById('date-start');
-const dateEnd = document.getElementById('date-end');
-const downloadFormat = document.getElementById('download-format');
-const btnDownload = document.getElementById('btn-download');
+const marketplaceFilter = document.getElementById('marketplace-filter');
+const projectsLoading = document.getElementById('projects-loading');
+const projectsList = document.getElementById('projects-list');
+const noProjects = document.getElementById('no-projects');
+const projectCount = document.getElementById('project-count');
+const notOnDatarova = document.getElementById('not-on-datarova');
+const mainControls = document.getElementById('main-controls');
+const btnExport = document.getElementById('btn-export');
 const btnCancel = document.getElementById('btn-cancel');
 const btnText = document.getElementById('btn-text');
 const btnSpinner = document.getElementById('btn-spinner');
@@ -22,51 +21,40 @@ const progressSection = document.getElementById('progress-section');
 const progressBar = document.getElementById('progress-bar');
 const progressText = document.getElementById('progress-text');
 const downloadLog = document.getElementById('download-log');
-const projectsLoading = document.getElementById('projects-loading');
-const projectsList = document.getElementById('projects-list');
-const noProjects = document.getElementById('no-projects');
-const notOnDatarova = document.getElementById('not-on-datarova');
-const mainControls = document.getElementById('main-controls');
 
-let isDownloading = false;
-let cancelRequested = false;
+let allProjects = []; // All detected projects
+let activeTabId = null;
+let activeTabUrl = null;
+let isExporting = false;
 
 // ── Initialization ──────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
   await checkActiveTab();
-  await loadSavedPreferences();
 });
 
 function setupEventListeners() {
-  // Date range toggle
-  dateRangeSelect.addEventListener('change', () => {
-    customDates.classList.toggle('hidden', dateRangeSelect.value !== 'custom');
-  });
+  // Marketplace filter
+  marketplaceFilter.addEventListener('change', filterProjects);
 
-  // Select/deselect all marketplaces
-  document.getElementById('select-all-markets').addEventListener('click', () => {
-    toggleAllCheckboxes('marketplace-list', true);
-  });
-  document.getElementById('deselect-all-markets').addEventListener('click', () => {
-    toggleAllCheckboxes('marketplace-list', false);
-  });
-
-  // Select/deselect all projects
+  // Select/deselect all
   document.getElementById('select-all-projects').addEventListener('click', () => {
-    toggleAllCheckboxes('projects-list', true);
+    toggleAllVisible(true);
   });
   document.getElementById('deselect-all-projects').addEventListener('click', () => {
-    toggleAllCheckboxes('projects-list', false);
+    toggleAllVisible(false);
   });
 
-  // Download button
-  btnDownload.addEventListener('click', startBulkDownload);
-  btnCancel.addEventListener('click', () => {
-    cancelRequested = true;
-    btnCancel.disabled = true;
-    addLogEntry('Cancellation requested...', 'info');
+  // Export button
+  btnExport.addEventListener('click', startBulkExport);
+  btnCancel.addEventListener('click', requestCancel);
+
+  // Listen for progress updates from the background script
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.action === 'exportProgress') {
+      onExportProgress(message);
+    }
   });
 }
 
@@ -80,6 +68,8 @@ async function checkActiveTab() {
       mainControls.classList.add('hidden');
       return;
     }
+    activeTabId = tab.id;
+    activeTabUrl = tab.url;
     await detectProjects(tab.id);
   } catch (err) {
     console.error('Tab check failed:', err);
@@ -93,55 +83,96 @@ async function detectProjects(tabId) {
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      // On first failure, try injecting the content script on-demand
+      // On second attempt, try injecting the content script
       if (attempt === 1) {
         try {
           await chrome.scripting.executeScript({
             target: { tabId },
             files: ['content.js'],
           });
-          // Give injected script time to initialize
           await new Promise((r) => setTimeout(r, 500));
-        } catch (injectErr) {
-          console.warn('Script injection skipped (may already be loaded):', injectErr);
+        } catch (e) {
+          // May already be loaded
         }
       }
 
       const response = await chrome.tabs.sendMessage(tabId, { action: 'getProjects' });
       if (response && response.projects && response.projects.length > 0) {
-        renderProjects(response.projects);
+        allProjects = response.projects;
+        populateMarketplaceFilter();
+        renderProjects(allProjects);
         return;
       }
 
-      // No projects found yet - wait and retry (SPA may still be rendering)
       if (attempt < MAX_RETRIES - 1) {
-        projectsLoading.textContent = `Scanning for projects (attempt ${attempt + 2}/${MAX_RETRIES})...`;
+        projectsLoading.textContent = 'Scanning for projects (attempt ' + (attempt + 2) + '/' + MAX_RETRIES + ')...';
         await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
       }
     } catch (err) {
-      console.warn(`Project detection attempt ${attempt + 1} failed:`, err);
+      console.warn('Detection attempt ' + (attempt + 1) + ' failed:', err);
       if (attempt < MAX_RETRIES - 1) {
         await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
       }
     }
   }
 
-  // All retries exhausted
   showProjectsError();
 }
 
+// ── Marketplace Filter ──────────────────────────────────────────────────────
+
+function populateMarketplaceFilter() {
+  // Collect unique marketplaces from detected projects
+  const marketplaces = new Set(allProjects.map((p) => p.marketplace));
+  const sorted = Array.from(marketplaces).sort();
+
+  // Reset to just "All"
+  marketplaceFilter.innerHTML = '<option value="all">All Marketplaces (' + allProjects.length + ')</option>';
+
+  sorted.forEach((mp) => {
+    const count = allProjects.filter((p) => p.marketplace === mp).length;
+    const option = document.createElement('option');
+    option.value = mp;
+    option.textContent = mp + ' (' + count + ')';
+    marketplaceFilter.appendChild(option);
+  });
+}
+
+function filterProjects() {
+  const selected = marketplaceFilter.value;
+  const filtered = selected === 'all'
+    ? allProjects
+    : allProjects.filter((p) => p.marketplace === selected);
+  renderProjects(filtered);
+}
+
+// ── Project Rendering ───────────────────────────────────────────────────────
+
 function renderProjects(projects) {
   projectsLoading.classList.add('hidden');
+  noProjects.classList.add('hidden');
   projectsList.classList.remove('hidden');
   projectsList.innerHTML = '';
+  projectCount.textContent = projects.length;
+
+  if (projects.length === 0) {
+    projectsList.classList.add('hidden');
+    noProjects.classList.remove('hidden');
+    return;
+  }
 
   projects.forEach((project) => {
     const label = document.createElement('label');
     label.className = 'checkbox-item';
-    label.innerHTML = `
-      <input type="checkbox" value="${escapeHtml(project.id)}" checked>
-      ${escapeHtml(project.name)}
-    `;
+    label.dataset.marketplace = project.marketplace;
+    label.innerHTML =
+      '<input type="checkbox" value="' + escapeHtml(project.id) + '" ' +
+      'data-asin="' + escapeHtml(project.asin || '') + '" ' +
+      'data-name="' + escapeHtml(project.name) + '" ' +
+      'data-marketplace="' + escapeHtml(project.marketplace) + '" checked>' +
+      '<span class="project-name">' + escapeHtml(project.name) + '</span>' +
+      '<span class="project-meta">' + escapeHtml(project.marketplace) +
+      (project.asin ? ' / ' + escapeHtml(project.asin) : '') + '</span>';
     projectsList.appendChild(label);
   });
 }
@@ -151,196 +182,126 @@ function showProjectsError() {
   noProjects.classList.remove('hidden');
 }
 
-// ── Bulk Download ───────────────────────────────────────────────────────────
+// ── Bulk Export ──────────────────────────────────────────────────────────────
 
-async function startBulkDownload() {
-  const selectedMarkets = getSelectedValues('marketplace-list');
-  const selectedProjects = getSelectedValues('projects-list');
-  const reportType = reportTypeSelect.value;
-  const format = downloadFormat.value;
-  const dateRange = getDateRange();
+async function startBulkExport() {
+  const checkboxes = projectsList.querySelectorAll('input[type="checkbox"]:checked');
+  const selectedProjects = Array.from(checkboxes).map((cb) => ({
+    id: cb.value,
+    asin: cb.dataset.asin,
+    name: cb.dataset.name,
+    marketplace: cb.dataset.marketplace,
+  }));
 
-  if (selectedMarkets.length === 0) {
-    alert('Please select at least one marketplace.');
+  if (selectedProjects.length === 0) {
+    alert('Please select at least one project.');
     return;
   }
 
-  // Begin download process
-  isDownloading = true;
-  cancelRequested = false;
-  btnDownload.disabled = true;
-  btnText.textContent = 'Downloading...';
+  // Begin export
+  isExporting = true;
+  btnExport.disabled = true;
+  btnText.textContent = 'Exporting...';
   btnSpinner.classList.remove('hidden');
   btnCancel.classList.remove('hidden');
   progressSection.classList.remove('hidden');
   downloadLog.innerHTML = '';
+  updateProgress(0, selectedProjects.length, 'Starting bulk export...');
 
-  const totalTasks = selectedMarkets.length * Math.max(selectedProjects.length, 1);
-  let completedTasks = 0;
+  addLogEntry('Exporting Daily Ranks for ' + selectedProjects.length + ' project(s)', 'info');
 
-  addLogEntry(`Starting bulk download: ${totalTasks} report(s)`, 'info');
-
-  for (const market of selectedMarkets) {
-    if (cancelRequested) break;
-
-    if (selectedProjects.length > 0) {
-      for (const project of selectedProjects) {
-        if (cancelRequested) break;
-
-        try {
-          updateProgress(completedTasks, totalTasks,
-            `Downloading ${reportType} for ${market} - Project: ${project}...`);
-
-          await requestDownload({
-            reportType,
-            marketplace: market,
-            projectId: project,
-            format,
-            dateRange,
-          });
-
-          completedTasks++;
-          addLogEntry(`${market} / ${project}: Downloaded`, 'success');
-        } catch (err) {
-          completedTasks++;
-          addLogEntry(`${market} / ${project}: Failed - ${err.message}`, 'error');
+  // Send the bulk export request to the background script
+  try {
+    const response = await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(
+        {
+          action: 'bulkExport',
+          projects: selectedProjects,
+          tabId: activeTabId,
+          returnUrl: activeTabUrl,
+        },
+        (resp) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(resp);
+          }
         }
-      }
+      );
+    });
+
+    if (response && response.success) {
+      const succeeded = response.results.filter((r) => r.success).length;
+      const failed = response.results.filter((r) => !r.success).length;
+      addLogEntry(
+        'Complete: ' + succeeded + ' succeeded, ' + failed + ' failed',
+        failed > 0 ? 'error' : 'success'
+      );
     } else {
-      // No projects detected, download per marketplace only
-      try {
-        updateProgress(completedTasks, totalTasks,
-          `Downloading ${reportType} for ${market}...`);
-
-        await requestDownload({
-          reportType,
-          marketplace: market,
-          projectId: null,
-          format,
-          dateRange,
-        });
-
-        completedTasks++;
-        addLogEntry(`${market}: Downloaded`, 'success');
-      } catch (err) {
-        completedTasks++;
-        addLogEntry(`${market}: Failed - ${err.message}`, 'error');
-      }
+      addLogEntry('Export failed: ' + (response?.error || 'Unknown error'), 'error');
     }
+  } catch (err) {
+    addLogEntry('Export error: ' + err.message, 'error');
   }
 
-  // Done
-  updateProgress(totalTasks, totalTasks,
-    cancelRequested ? 'Download cancelled.' : 'All downloads complete!');
-  finishDownload();
-  savePreferences();
+  finishExport();
 }
 
-async function requestDownload(params) {
-  return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(
-      { action: 'downloadReport', params },
-      (response) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else if (response && response.success) {
-          resolve(response);
-        } else {
-          reject(new Error(response?.error || 'Unknown error'));
-        }
-      }
-    );
-  });
+function requestCancel() {
+  // Note: cancel is best-effort since the background script is driving navigation
+  btnCancel.disabled = true;
+  addLogEntry('Cancellation requested...', 'info');
 }
 
-function finishDownload() {
-  isDownloading = false;
-  btnDownload.disabled = false;
-  btnText.textContent = 'Download Reports';
+function finishExport() {
+  isExporting = false;
+  btnExport.disabled = false;
+  btnText.textContent = 'Export Daily Ranks';
   btnSpinner.classList.add('hidden');
   btnCancel.classList.add('hidden');
   btnCancel.disabled = false;
+}
+
+// ── Progress Handling ───────────────────────────────────────────────────────
+
+function onExportProgress(message) {
+  const { projectName, success, error, completed, total } = message;
+
+  if (success) {
+    addLogEntry(projectName + ': Exported', 'success');
+  } else {
+    addLogEntry(projectName + ': Failed - ' + (error || 'Unknown'), 'error');
+  }
+
+  updateProgress(completed, total,
+    success ? ('Exported ' + projectName) : ('Failed: ' + projectName));
 }
 
 // ── UI Helpers ──────────────────────────────────────────────────────────────
 
 function updateProgress(completed, total, message) {
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-  progressBar.style.width = `${pct}%`;
-  progressText.textContent = `${message} (${completed}/${total})`;
+  progressBar.style.width = pct + '%';
+  progressText.textContent = message + ' (' + completed + '/' + total + ')';
 }
 
 function addLogEntry(message, type) {
   const entry = document.createElement('div');
-  entry.className = `log-entry log-${type}`;
-  entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+  entry.className = 'log-entry log-' + type;
+  entry.textContent = '[' + new Date().toLocaleTimeString() + '] ' + message;
   downloadLog.appendChild(entry);
   downloadLog.scrollTop = downloadLog.scrollHeight;
 }
 
-function getSelectedValues(containerId) {
-  const container = document.getElementById(containerId);
-  const checkboxes = container.querySelectorAll('input[type="checkbox"]:checked');
-  return Array.from(checkboxes).map((cb) => cb.value);
-}
-
-function toggleAllCheckboxes(containerId, checked) {
-  const container = document.getElementById(containerId);
-  container.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+function toggleAllVisible(checked) {
+  projectsList.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
     cb.checked = checked;
   });
 }
 
-function getDateRange() {
-  const value = dateRangeSelect.value;
-  if (value === 'custom') {
-    return { type: 'custom', start: dateStart.value, end: dateEnd.value };
-  }
-  const days = parseInt(value.replace('last-', ''), 10);
-  return { type: 'relative', days };
-}
-
 function escapeHtml(str) {
-  const div = document.createElement('div');
+  if (!str) return '';
+  var div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
-}
-
-// ── Preferences Persistence ─────────────────────────────────────────────────
-
-async function savePreferences() {
-  try {
-    await chrome.storage.local.set({
-      preferences: {
-        reportType: reportTypeSelect.value,
-        dateRange: dateRangeSelect.value,
-        format: downloadFormat.value,
-        selectedMarkets: getSelectedValues('marketplace-list'),
-      },
-    });
-  } catch (err) {
-    console.error('Failed to save preferences:', err);
-  }
-}
-
-async function loadSavedPreferences() {
-  try {
-    const { preferences } = await chrome.storage.local.get('preferences');
-    if (!preferences) return;
-
-    if (preferences.reportType) reportTypeSelect.value = preferences.reportType;
-    if (preferences.dateRange) {
-      dateRangeSelect.value = preferences.dateRange;
-      customDates.classList.toggle('hidden', preferences.dateRange !== 'custom');
-    }
-    if (preferences.format) downloadFormat.value = preferences.format;
-    if (preferences.selectedMarkets) {
-      const container = document.getElementById('marketplace-list');
-      container.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
-        cb.checked = preferences.selectedMarkets.includes(cb.value);
-      });
-    }
-  } catch (err) {
-    console.error('Failed to load preferences:', err);
-  }
 }

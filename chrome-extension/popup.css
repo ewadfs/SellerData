@@ -68,9 +68,9 @@ select:focus, input[type="date"]:focus {
 
 .checkbox-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 4px;
-  max-height: 160px;
+  max-height: 200px;
   overflow-y: auto;
   padding: 4px;
 }
@@ -264,6 +264,29 @@ select:focus, input[type="date"]:focus {
   color: #6b7280;
   font-style: italic;
   padding: 8px 0;
+}
+
+.project-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.project-meta {
+  font-size: 10px;
+  color: #9ca3af;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.count-badge {
+  display: inline-block;
+  background: #4361ee;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin-left: 4px;
 }
 
 .hidden {
