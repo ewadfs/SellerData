@@ -88,18 +88,46 @@ async function checkActiveTab() {
 }
 
 async function detectProjects(tabId) {
-  try {
-    const response = await chrome.tabs.sendMessage(tabId, { action: 'getProjects' });
-    if (response && response.projects && response.projects.length > 0) {
-      renderProjects(response.projects);
-    } else {
-      showProjectsError();
+  const MAX_RETRIES = 4;
+  const RETRY_DELAY_MS = 1500;
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      // On first failure, try injecting the content script on-demand
+      if (attempt === 1) {
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId },
+            files: ['content.js'],
+          });
+          // Give injected script time to initialize
+          await new Promise((r) => setTimeout(r, 500));
+        } catch (injectErr) {
+          console.warn('Script injection skipped (may already be loaded):', injectErr);
+        }
+      }
+
+      const response = await chrome.tabs.sendMessage(tabId, { action: 'getProjects' });
+      if (response && response.projects && response.projects.length > 0) {
+        renderProjects(response.projects);
+        return;
+      }
+
+      // No projects found yet - wait and retry (SPA may still be rendering)
+      if (attempt < MAX_RETRIES - 1) {
+        projectsLoading.textContent = `Scanning for projects (attempt ${attempt + 2}/${MAX_RETRIES})...`;
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      }
+    } catch (err) {
+      console.warn(`Project detection attempt ${attempt + 1} failed:`, err);
+      if (attempt < MAX_RETRIES - 1) {
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      }
     }
-  } catch (err) {
-    console.error('Failed to detect projects:', err);
-    // If content script isn't ready, try injecting and retrying
-    showProjectsError();
   }
+
+  // All retries exhausted
+  showProjectsError();
 }
 
 function renderProjects(projects) {

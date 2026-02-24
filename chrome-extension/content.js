@@ -11,55 +11,129 @@
   // ── Project Detection ───────────────────────────────────────────────────
 
   /**
-   * Scan the page for project listings. Datarova typically shows projects
-   * in sidebar navigation or dropdown menus.
+   * Scan the page for project listings using multiple broad strategies
+   * to handle various DOM structures and SPA frameworks.
    */
   function detectProjects() {
     const projects = [];
+    const seen = new Set();
 
-    // Strategy 1: Look for project items in sidebar/nav
-    const projectElements = document.querySelectorAll(
-      '[data-project-id], .project-item, .project-link, [href*="/project/"]'
-    );
-    projectElements.forEach((el) => {
-      const id = el.dataset?.projectId || extractProjectIdFromHref(el.href);
-      const name = el.textContent?.trim() || `Project ${id}`;
-      if (id && !projects.some((p) => p.id === id)) {
-        projects.push({ id, name });
+    function addProject(id, name) {
+      if (!id || seen.has(id)) return;
+      // Skip non-project path segments
+      if (['new', 'create', 'edit', 'settings', 'delete'].includes(id)) return;
+      seen.add(id);
+      projects.push({ id, name: name || `Project ${id}` });
+    }
+
+    // Strategy 1: Find <a> links pointing to project pages
+    // Matches /projects/<id>, /project/<id>, ?project=<id>
+    document.querySelectorAll('a[href]').forEach((a) => {
+      const href = a.href || a.getAttribute('href') || '';
+
+      // Match /projects/<id> or /project/<id>
+      let match = href.match(/\/projects?\/([a-zA-Z0-9_-]+)/);
+      if (match) {
+        const name = a.textContent?.trim().split('\n')[0]?.trim() || '';
+        addProject(match[1], name);
+        return;
+      }
+
+      // Match ?project=<id> or &project_id=<id>
+      match = href.match(/[?&]project[_-]?(?:id)?=([a-zA-Z0-9_-]+)/);
+      if (match) {
+        const name = a.textContent?.trim().split('\n')[0]?.trim() || '';
+        addProject(match[1], name);
       }
     });
 
-    // Strategy 2: Look for project selector dropdowns
-    const selectors = document.querySelectorAll(
-      'select[name*="project"], #project-select, .project-selector select'
-    );
-    selectors.forEach((select) => {
+    // Strategy 2: Look for data attributes containing project IDs
+    document.querySelectorAll(
+      '[data-project-id], [data-project], [data-id], [data-row-key]'
+    ).forEach((el) => {
+      const id = el.dataset.projectId || el.dataset.project || el.dataset.id || el.dataset.rowKey;
+      const name = el.querySelector('a, [class*="name"], [class*="title"], h2, h3, h4')
+        ?.textContent?.trim() || el.textContent?.trim().split('\n')[0]?.trim() || '';
+      addProject(id, name);
+    });
+
+    // Strategy 3: Scan table rows on project-related pages
+    if (window.location.pathname.includes('project') || window.location.href.includes('project')) {
+      document.querySelectorAll('table tbody tr, [role="row"], [class*="row"]').forEach((row) => {
+        const link = row.querySelector('a[href]');
+        if (link) {
+          const href = link.href || '';
+          const match = href.match(/\/projects?\/([a-zA-Z0-9_-]+)/);
+          if (match) {
+            const name = link.textContent?.trim() ||
+              row.querySelector('td:first-child, [class*="name"]')?.textContent?.trim() || '';
+            addProject(match[1], name);
+          }
+        }
+      });
+
+      // Also look for card/grid/list layouts
+      document.querySelectorAll(
+        '[class*="project"], [class*="card"], [class*="list-item"], [class*="item"]'
+      ).forEach((el) => {
+        const link = el.querySelector('a[href]');
+        if (link) {
+          const href = link.href || '';
+          const match = href.match(/\/projects?\/([a-zA-Z0-9_-]+)/);
+          if (match) {
+            const name = link.textContent?.trim() ||
+              el.querySelector('h2, h3, h4, [class*="name"], [class*="title"]')?.textContent?.trim() || '';
+            addProject(match[1], name);
+          }
+        }
+      });
+    }
+
+    // Strategy 4: Look for project selector dropdowns
+    document.querySelectorAll(
+      'select[name*="project"], #project-select, .project-selector select, select'
+    ).forEach((select) => {
       Array.from(select.options).forEach((option) => {
         if (option.value && option.value !== '' && option.value !== 'all') {
-          const id = option.value;
-          const name = option.textContent?.trim() || `Project ${id}`;
-          if (!projects.some((p) => p.id === id)) {
-            projects.push({ id, name });
+          const text = option.textContent?.trim() || '';
+          // Only add if option looks like a project (has meaningful text)
+          if (text && text.length > 1) {
+            addProject(option.value, text);
           }
         }
       });
     });
 
-    // Strategy 3: Parse project data from embedded JSON/scripts
-    const scripts = document.querySelectorAll('script:not([src])');
-    scripts.forEach((script) => {
+    // Strategy 5: Check Next.js / Nuxt / framework state
+    try {
+      const stateObjects = [window.__NEXT_DATA__, window.__NUXT__, window.__APP_DATA__];
+      stateObjects.forEach((state) => {
+        if (state) findProjectsInObject(state, addProject);
+      });
+    } catch (e) {
+      // Ignore errors accessing window properties
+    }
+
+    // Strategy 6: Parse embedded JSON/scripts for project arrays
+    document.querySelectorAll('script:not([src])').forEach((script) => {
       try {
         const content = script.textContent;
-        const projectMatch = content.match(/projects\s*[:=]\s*(\[[\s\S]*?\])/);
-        if (projectMatch) {
-          const parsed = JSON.parse(projectMatch[1]);
-          parsed.forEach((p) => {
-            const id = String(p.id || p.project_id);
-            const name = p.name || p.title || `Project ${id}`;
-            if (id && !projects.some((proj) => proj.id === id)) {
-              projects.push({ id, name });
-            }
-          });
+        const patterns = [
+          /projects\s*[:=]\s*(\[[\s\S]*?\])/,
+          /projectList\s*[:=]\s*(\[[\s\S]*?\])/,
+          /"projects"\s*:\s*(\[[\s\S]*?\])/,
+        ];
+        for (const pattern of patterns) {
+          const match = content.match(pattern);
+          if (match) {
+            const parsed = JSON.parse(match[1]);
+            parsed.forEach((p) => {
+              addProject(
+                String(p.id || p.project_id || p._id || ''),
+                p.name || p.title || ''
+              );
+            });
+          }
         }
       } catch (e) {
         // Ignore parse errors
@@ -69,10 +143,29 @@
     return projects;
   }
 
-  function extractProjectIdFromHref(href) {
-    if (!href) return null;
-    const match = href.match(/\/project\/(\w+)/);
-    return match ? match[1] : null;
+  /**
+   * Recursively search an object tree for arrays of project-like objects.
+   */
+  function findProjectsInObject(obj, addProject, depth) {
+    if (depth === void 0) depth = 0;
+    if (depth > 8 || !obj || typeof obj !== 'object') return;
+    if (Array.isArray(obj)) {
+      obj.forEach((item) => {
+        if (item && typeof item === 'object' &&
+            (item.id || item.project_id || item._id) &&
+            (item.name || item.title || item.project_name)) {
+          addProject(
+            String(item.id || item.project_id || item._id),
+            item.name || item.title || item.project_name
+          );
+        }
+      });
+    }
+    try {
+      Object.values(obj).forEach((v) => findProjectsInObject(v, addProject, depth + 1));
+    } catch (e) {
+      // Ignore circular reference or access errors
+    }
   }
 
   // ── Download Triggering ─────────────────────────────────────────────────
