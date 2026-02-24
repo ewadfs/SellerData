@@ -1,59 +1,61 @@
 /**
  * Datarova Bulk Report Downloader - Popup Script
  *
- * Simplified workflow: detect projects from the Datarova projects page,
- * filter by marketplace, and bulk export Daily Ranks with one button.
+ * Two-phase workflow:
+ *   1. Export Daily Ranks for selected projects (navigates to each project)
+ *   2. Download the generated reports from /download-report page
  */
 
 // DOM elements
-const marketplaceFilter = document.getElementById('marketplace-filter');
-const projectsLoading = document.getElementById('projects-loading');
-const projectsList = document.getElementById('projects-list');
-const noProjects = document.getElementById('no-projects');
-const projectCount = document.getElementById('project-count');
-const notOnDatarova = document.getElementById('not-on-datarova');
-const mainControls = document.getElementById('main-controls');
-const btnExport = document.getElementById('btn-export');
-const btnCancel = document.getElementById('btn-cancel');
-const btnText = document.getElementById('btn-text');
-const btnSpinner = document.getElementById('btn-spinner');
-const progressSection = document.getElementById('progress-section');
-const progressBar = document.getElementById('progress-bar');
-const progressText = document.getElementById('progress-text');
-const downloadLog = document.getElementById('download-log');
+var marketplaceFilter = document.getElementById('marketplace-filter');
+var projectsLoading = document.getElementById('projects-loading');
+var projectsList = document.getElementById('projects-list');
+var noProjects = document.getElementById('no-projects');
+var projectCount = document.getElementById('project-count');
+var notOnDatarova = document.getElementById('not-on-datarova');
+var mainControls = document.getElementById('main-controls');
+var btnExport = document.getElementById('btn-export');
+var btnCancel = document.getElementById('btn-cancel');
+var btnText = document.getElementById('btn-text');
+var btnSpinner = document.getElementById('btn-spinner');
+var progressSection = document.getElementById('progress-section');
+var progressBar = document.getElementById('progress-bar');
+var progressText = document.getElementById('progress-text');
+var downloadLog = document.getElementById('download-log');
+var phaseLabel = document.getElementById('phase-label');
 
-let allProjects = []; // All detected projects
-let activeTabId = null;
-let activeTabUrl = null;
-let isExporting = false;
+var allProjects = [];
+var activeTabId = null;
+var activeTabUrl = null;
+var isExporting = false;
 
 // ── Initialization ──────────────────────────────────────────────────────────
 
-document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener('DOMContentLoaded', async function () {
   setupEventListeners();
   await checkActiveTab();
 });
 
 function setupEventListeners() {
-  // Marketplace filter
   marketplaceFilter.addEventListener('change', filterProjects);
 
-  // Select/deselect all
-  document.getElementById('select-all-projects').addEventListener('click', () => {
+  document.getElementById('select-all-projects').addEventListener('click', function () {
     toggleAllVisible(true);
   });
-  document.getElementById('deselect-all-projects').addEventListener('click', () => {
+  document.getElementById('deselect-all-projects').addEventListener('click', function () {
     toggleAllVisible(false);
   });
 
-  // Export button
   btnExport.addEventListener('click', startBulkExport);
   btnCancel.addEventListener('click', requestCancel);
 
   // Listen for progress updates from the background script
-  chrome.runtime.onMessage.addListener((message) => {
+  chrome.runtime.onMessage.addListener(function (message) {
     if (message.action === 'exportProgress') {
       onExportProgress(message);
+    }
+    if (message.action === 'phaseChange') {
+      onPhaseChange(message);
     }
   });
 }
@@ -62,7 +64,8 @@ function setupEventListeners() {
 
 async function checkActiveTab() {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    var tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    var tab = tabs[0];
     if (!tab || !tab.url || !tab.url.includes('datarova.com')) {
       notOnDatarova.classList.remove('hidden');
       mainControls.classList.add('hidden');
@@ -78,25 +81,22 @@ async function checkActiveTab() {
 }
 
 async function detectProjects(tabId) {
-  const MAX_RETRIES = 4;
-  const RETRY_DELAY_MS = 1500;
+  var MAX_RETRIES = 4;
+  var RETRY_DELAY_MS = 1500;
 
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+  for (var attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      // On second attempt, try injecting the content script
       if (attempt === 1) {
         try {
           await chrome.scripting.executeScript({
-            target: { tabId },
+            target: { tabId: tabId },
             files: ['content.js'],
           });
-          await new Promise((r) => setTimeout(r, 500));
-        } catch (e) {
-          // May already be loaded
-        }
+          await new Promise(function (r) { setTimeout(r, 500); });
+        } catch (e) { /* may already be loaded */ }
       }
 
-      const response = await chrome.tabs.sendMessage(tabId, { action: 'getProjects' });
+      var response = await chrome.tabs.sendMessage(tabId, { action: 'getProjects' });
       if (response && response.projects && response.projects.length > 0) {
         allProjects = response.projects;
         populateMarketplaceFilter();
@@ -106,12 +106,12 @@ async function detectProjects(tabId) {
 
       if (attempt < MAX_RETRIES - 1) {
         projectsLoading.textContent = 'Scanning for projects (attempt ' + (attempt + 2) + '/' + MAX_RETRIES + ')...';
-        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        await new Promise(function (r) { setTimeout(r, RETRY_DELAY_MS); });
       }
     } catch (err) {
       console.warn('Detection attempt ' + (attempt + 1) + ' failed:', err);
       if (attempt < MAX_RETRIES - 1) {
-        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        await new Promise(function (r) { setTimeout(r, RETRY_DELAY_MS); });
       }
     }
   }
@@ -122,16 +122,14 @@ async function detectProjects(tabId) {
 // ── Marketplace Filter ──────────────────────────────────────────────────────
 
 function populateMarketplaceFilter() {
-  // Collect unique marketplaces from detected projects
-  const marketplaces = new Set(allProjects.map((p) => p.marketplace));
-  const sorted = Array.from(marketplaces).sort();
+  var marketplaces = new Set(allProjects.map(function (p) { return p.marketplace; }));
+  var sorted = Array.from(marketplaces).sort();
 
-  // Reset to just "All"
   marketplaceFilter.innerHTML = '<option value="all">All Marketplaces (' + allProjects.length + ')</option>';
 
-  sorted.forEach((mp) => {
-    const count = allProjects.filter((p) => p.marketplace === mp).length;
-    const option = document.createElement('option');
+  sorted.forEach(function (mp) {
+    var count = allProjects.filter(function (p) { return p.marketplace === mp; }).length;
+    var option = document.createElement('option');
     option.value = mp;
     option.textContent = mp + ' (' + count + ')';
     marketplaceFilter.appendChild(option);
@@ -139,10 +137,10 @@ function populateMarketplaceFilter() {
 }
 
 function filterProjects() {
-  const selected = marketplaceFilter.value;
-  const filtered = selected === 'all'
+  var selected = marketplaceFilter.value;
+  var filtered = selected === 'all'
     ? allProjects
-    : allProjects.filter((p) => p.marketplace === selected);
+    : allProjects.filter(function (p) { return p.marketplace === selected; });
   renderProjects(filtered);
 }
 
@@ -161,8 +159,8 @@ function renderProjects(projects) {
     return;
   }
 
-  projects.forEach((project) => {
-    const label = document.createElement('label');
+  projects.forEach(function (project) {
+    var label = document.createElement('label');
     label.className = 'checkbox-item';
     label.dataset.marketplace = project.marketplace;
     label.innerHTML =
@@ -185,13 +183,15 @@ function showProjectsError() {
 // ── Bulk Export ──────────────────────────────────────────────────────────────
 
 async function startBulkExport() {
-  const checkboxes = projectsList.querySelectorAll('input[type="checkbox"]:checked');
-  const selectedProjects = Array.from(checkboxes).map((cb) => ({
-    id: cb.value,
-    asin: cb.dataset.asin,
-    name: cb.dataset.name,
-    marketplace: cb.dataset.marketplace,
-  }));
+  var checkboxes = projectsList.querySelectorAll('input[type="checkbox"]:checked');
+  var selectedProjects = Array.from(checkboxes).map(function (cb) {
+    return {
+      id: cb.value,
+      asin: cb.dataset.asin,
+      name: cb.dataset.name,
+      marketplace: cb.dataset.marketplace,
+    };
+  });
 
   if (selectedProjects.length === 0) {
     alert('Please select at least one project.');
@@ -206,13 +206,13 @@ async function startBulkExport() {
   btnCancel.classList.remove('hidden');
   progressSection.classList.remove('hidden');
   downloadLog.innerHTML = '';
-  updateProgress(0, selectedProjects.length, 'Starting bulk export...');
 
+  setPhaseLabel('Phase 1/2: Exporting');
+  updateProgress(0, selectedProjects.length, 'Starting bulk export...');
   addLogEntry('Exporting Daily Ranks for ' + selectedProjects.length + ' project(s)', 'info');
 
-  // Send the bulk export request to the background script
   try {
-    const response = await new Promise((resolve, reject) => {
+    var response = await new Promise(function (resolve, reject) {
       chrome.runtime.sendMessage(
         {
           action: 'bulkExport',
@@ -220,7 +220,7 @@ async function startBulkExport() {
           tabId: activeTabId,
           returnUrl: activeTabUrl,
         },
-        (resp) => {
+        function (resp) {
           if (chrome.runtime.lastError) {
             reject(new Error(chrome.runtime.lastError.message));
           } else {
@@ -231,10 +231,10 @@ async function startBulkExport() {
     });
 
     if (response && response.success) {
-      const succeeded = response.results.filter((r) => r.success).length;
-      const failed = response.results.filter((r) => !r.success).length;
+      var succeeded = response.results.filter(function (r) { return r.success; }).length;
+      var failed = response.results.filter(function (r) { return !r.success; }).length;
       addLogEntry(
-        'Complete: ' + succeeded + ' succeeded, ' + failed + ' failed',
+        'Done! ' + succeeded + ' exported, ' + failed + ' failed',
         failed > 0 ? 'error' : 'success'
       );
     } else {
@@ -248,7 +248,6 @@ async function startBulkExport() {
 }
 
 function requestCancel() {
-  // Note: cancel is best-effort since the background script is driving navigation
   btnCancel.disabled = true;
   addLogEntry('Cancellation requested...', 'info');
 }
@@ -260,33 +259,65 @@ function finishExport() {
   btnSpinner.classList.add('hidden');
   btnCancel.classList.add('hidden');
   btnCancel.disabled = false;
+  setPhaseLabel('');
 }
 
 // ── Progress Handling ───────────────────────────────────────────────────────
 
-function onExportProgress(message) {
-  const { projectName, success, error, completed, total } = message;
-
-  if (success) {
-    addLogEntry(projectName + ': Exported', 'success');
-  } else {
-    addLogEntry(projectName + ': Failed - ' + (error || 'Unknown'), 'error');
+function onPhaseChange(message) {
+  if (message.phase === 'export') {
+    setPhaseLabel('Phase 1/2: Exporting');
+    updateProgress(0, message.total, 'Exporting reports...');
+  } else if (message.phase === 'download') {
+    setPhaseLabel('Phase 2/2: Downloading');
+    updateProgress(0, message.total, 'Navigating to downloads...');
+    addLogEntry('Navigating to download page...', 'info');
   }
+}
 
-  updateProgress(completed, total,
-    success ? ('Exported ' + projectName) : ('Failed: ' + projectName));
+function onExportProgress(message) {
+  var projectName = message.projectName;
+  var success = message.success;
+  var error = message.error;
+  var completed = message.completed;
+  var total = message.total;
+  var phase = message.phase || 'export';
+
+  if (phase === 'export') {
+    if (success) {
+      addLogEntry(projectName + ': Exported', 'success');
+    } else {
+      addLogEntry(projectName + ': Failed - ' + (error || 'Unknown'), 'error');
+    }
+    updateProgress(completed, total,
+      success ? ('Exported ' + projectName) : ('Failed: ' + projectName));
+  } else if (phase === 'download') {
+    if (success) {
+      addLogEntry(projectName, 'success');
+    } else {
+      addLogEntry(projectName + ' - ' + (error || 'Unknown'), 'error');
+    }
+    updateProgress(completed, total, projectName);
+  }
 }
 
 // ── UI Helpers ──────────────────────────────────────────────────────────────
 
+function setPhaseLabel(text) {
+  if (phaseLabel) {
+    phaseLabel.textContent = text;
+    phaseLabel.classList.toggle('hidden', !text);
+  }
+}
+
 function updateProgress(completed, total, message) {
-  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+  var pct = total > 0 ? Math.round((completed / total) * 100) : 0;
   progressBar.style.width = pct + '%';
   progressText.textContent = message + ' (' + completed + '/' + total + ')';
 }
 
 function addLogEntry(message, type) {
-  const entry = document.createElement('div');
+  var entry = document.createElement('div');
   entry.className = 'log-entry log-' + type;
   entry.textContent = '[' + new Date().toLocaleTimeString() + '] ' + message;
   downloadLog.appendChild(entry);
@@ -294,7 +325,7 @@ function addLogEntry(message, type) {
 }
 
 function toggleAllVisible(checked) {
-  projectsList.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+  projectsList.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
     cb.checked = checked;
   });
 }

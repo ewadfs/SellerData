@@ -195,6 +195,13 @@ select:focus, input[type="date"]:focus {
   margin-top: 14px;
 }
 
+.phase-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4361ee;
+  margin-bottom: 6px;
+}
+
 .progress-bar-container {
   width: 100%;
   height: 6px;
