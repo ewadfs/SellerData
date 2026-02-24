@@ -112,69 +112,90 @@
    * "Brand View" (default) and "ASIN View".  We need ASIN View so
    * the per-ASIN selector appears.
    *
-   * IMPORTANT: We do NOT use findAsinSelector() to detect the current
-   * view — that function matches generic inputs that exist on both views.
-   * Instead we check the URL and active-tab state directly.
+   * The view toggle is plain text tabs ("Brand View" | "ASIN View")
+   * rendered as simple elements (div/span/a) — NOT kat-tab-header
+   * or [role="tab"].  We find them by scanning visible text content.
    */
   async function ensureAsinView() {
-    // Check 1: URL already has viewType=ASIN — we're on ASIN view
-    const currentUrl = new URL(window.location.href);
-    if ((currentUrl.searchParams.get('viewType') || '').toUpperCase() === 'ASIN') {
-      baLog('Already on ASIN view (URL)');
+    baLog('Checking view mode...');
+
+    // Find ALL elements whose trimmed text is exactly "ASIN View" or
+    // "Brand View".  Walk the DOM to find the smallest elements that
+    // contain these exact strings (the tab labels themselves, not a
+    // parent that contains both).
+    let asinTab = null;
+    let brandTab = null;
+
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_ELEMENT,
+      {
+        acceptNode(node) {
+          // Skip our own panel and hidden elements
+          if (node.closest('#' + PANEL_ID)) return NodeFilter.FILTER_REJECT;
+          if (!isVisible(node)) return NodeFilter.FILTER_SKIP;
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      }
+    );
+
+    while (walker.nextNode()) {
+      const el = walker.currentNode;
+      const text = (el.textContent || '').trim();
+      // Must be a small/leaf element — not a huge container
+      if (text === 'ASIN View' || text === 'ASIN view') {
+        asinTab = el;
+      } else if (text === 'Brand View' || text === 'Brand view') {
+        brandTab = el;
+      }
+      if (asinTab && brandTab) break;
+    }
+
+    // Also check shadow DOM (kat components)
+    if (!asinTab) {
+      const deepEls = querySelectorAllDeep('*');
+      for (const el of deepEls) {
+        const text = (el.textContent || '').trim();
+        if ((text === 'ASIN View' || text === 'ASIN view') && isVisible(el)) {
+          asinTab = el;
+          break;
+        }
+      }
+    }
+
+    if (!asinTab) {
+      baLog('  Could not find "ASIN View" tab on the page', 'warn');
+      return false;
+    }
+
+    // Check if ASIN View is already selected by comparing styles/classes
+    // with Brand View tab.  Common patterns: active class, bold text,
+    // underline, different background, aria-selected, etc.
+    const isAsinActive = (
+      asinTab.getAttribute('aria-selected') === 'true' ||
+      asinTab.getAttribute('aria-current') === 'true' ||
+      asinTab.classList?.contains('active') ||
+      asinTab.classList?.contains('selected') ||
+      asinTab.getAttribute('selected') !== null ||
+      // If brand tab exists, compare computed font-weight (active tab is bolder)
+      (brandTab && window.getComputedStyle(asinTab).fontWeight >
+                   window.getComputedStyle(brandTab).fontWeight)
+    );
+
+    if (isAsinActive) {
+      baLog('Already on ASIN view');
       return true;
     }
 
-    // Check 2: Look for an active/selected tab that says "ASIN"
-    const allTabs = querySelectorAllDeep(
-      'kat-tab-header, [role="tab"], kat-tab'
-    );
-    for (const tab of allTabs) {
-      const text = (tab.textContent || tab.getAttribute('label') || '').toLowerCase();
-      const isActive = tab.getAttribute('selected') !== null ||
-                       tab.getAttribute('active') !== null ||
-                       tab.classList?.contains('active') ||
-                       tab.classList?.contains('selected') ||
-                       tab.getAttribute('aria-selected') === 'true';
-      if (text.includes('asin') && isActive) {
-        baLog('Already on ASIN view (active tab)');
-        return true;
-      }
-    }
-
+    // Click the ASIN View tab
     baLog('Switching to ASIN view...');
+    asinTab.click();
+    await sleep(4000);
 
-    // Strategy 1: kat-tab-header tabs — click the one containing "ASIN"
-    for (const tab of allTabs) {
-      const text = (tab.textContent || tab.getAttribute('label') || '').toLowerCase();
-      if (text.includes('asin')) {
-        const inner = tab.shadowRoot?.querySelector('button, [role="tab"]') || tab;
-        inner.click();
-        baLog('  Clicked ASIN View tab');
-        await sleep(4000);
-        return true;
-      }
-    }
-
-    // Strategy 2: Regular buttons/links with text "ASIN View" or "ASIN"
-    const allClickables = querySelectorAllDeep(
-      'button, a, [role="button"], kat-button, kat-link'
-    );
-    for (const el of allClickables) {
-      const text = (el.textContent || el.getAttribute('label') || '').trim().toLowerCase();
-      if ((text.includes('asin view') || text === 'asin') && isVisible(el)) {
-        const inner = el.shadowRoot?.querySelector('button, a') || el;
-        inner.click();
-        baLog('  Clicked ASIN View button');
-        await sleep(4000);
-        return true;
-      }
-    }
-
-    // Strategy 3: URL-based — set viewType=ASIN and reload
-    currentUrl.searchParams.set('viewType', 'ASIN');
-    baLog('  Navigating to ASIN view via URL...');
-    window.location.href = currentUrl.toString();
-    return 'navigated';
+    // Verify it switched — look for a kat-predictive-input that wasn't
+    // there before, or just trust the click worked
+    baLog('  Clicked "ASIN View" tab');
+    return true;
   }
 
   // ============================================================
