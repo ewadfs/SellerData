@@ -229,13 +229,24 @@
   // ── Export Triggering (runs on /projects/<id>/ranks/<asin> page) ──────────
 
   async function triggerExport() {
+    console.log('[Datarova Bulk] triggerExport: looking for Export button...');
+
     var exportBtn = findButtonByText('export');
     if (!exportBtn) {
+      // Log all buttons for debugging
+      var allBtns = document.querySelectorAll('button, [role="button"], .MuiButton-root');
+      console.log('[Datarova Bulk] triggerExport: found', allBtns.length, 'buttons on page:');
+      for (var b = 0; b < Math.min(allBtns.length, 20); b++) {
+        console.log('[Datarova Bulk]   btn[' + b + ']:', (allBtns[b].textContent || '').trim().substring(0, 60),
+          '| aria-label:', allBtns[b].getAttribute('aria-label'),
+          '| class:', allBtns[b].className.substring(0, 60));
+      }
       throw new Error('Export button not found on page');
     }
 
+    console.log('[Datarova Bulk] triggerExport: clicking Export button:', exportBtn.textContent.trim());
     exportBtn.click();
-    await sleep(800);
+    await sleep(1000);
 
     var menu = await waitForElement(
       '[role="menu"], [role="presentation"] ul, ' +
@@ -244,19 +255,23 @@
     );
 
     if (!menu) {
+      console.log('[Datarova Bulk] triggerExport: menu not found, page HTML sample:',
+        document.body.innerHTML.substring(0, 500));
       throw new Error('Export menu did not open');
     }
 
-    await sleep(300);
+    await sleep(500);
 
     var menuItems = document.querySelectorAll(
       '[role="menuitem"], .MuiMenuItem-root, ' +
       '.MuiListItem-root, [role="presentation"] li'
     );
 
+    console.log('[Datarova Bulk] triggerExport: found', menuItems.length, 'menu items:');
     var dailyRanksItem = null;
     for (var i = 0; i < menuItems.length; i++) {
       var text = (menuItems[i].textContent || '').trim().toLowerCase();
+      console.log('[Datarova Bulk]   item[' + i + ']:', text);
       if (text.includes('daily') && text.includes('rank')) {
         dailyRanksItem = menuItems[i];
         break;
@@ -265,25 +280,33 @@
 
     if (!dailyRanksItem) {
       document.body.click();
-      throw new Error('Daily Ranks option not found in export menu');
+      throw new Error('Daily Ranks option not found in export menu. Items: ' +
+        Array.from(menuItems).map(function (m) { return m.textContent.trim(); }).join(', '));
     }
 
+    console.log('[Datarova Bulk] triggerExport: clicking Daily Ranks item');
     dailyRanksItem.click();
     await sleep(3000);
+    console.log('[Datarova Bulk] triggerExport: done');
     return true;
   }
 
   // ── Download Page Handling (runs on /download-report page) ────────────────
 
   async function downloadReadyReports(count) {
+    console.log('[Datarova Bulk] downloadReadyReports called, count:', count);
+
     var table = await waitForElement('table.MuiTable-root, table', 8000);
     if (!table) {
+      console.log('[Datarova Bulk] downloadReadyReports: no table found on page');
       throw new Error('Download report table not found');
     }
 
     var rows = table.querySelectorAll('tbody tr[id^="body-row-"]');
+    console.log('[Datarova Bulk] downloadReadyReports: body-row- rows:', rows.length);
     if (rows.length === 0) {
       rows = table.querySelectorAll('tbody tr');
+      console.log('[Datarova Bulk] downloadReadyReports: fallback tbody tr rows:', rows.length);
     }
     if (rows.length === 0) {
       throw new Error('No report rows found');
@@ -297,24 +320,60 @@
 
     for (var i = 0; i < targetRows.length; i++) {
       var row = targetRows[i];
+      var rowText = (row.textContent || '').substring(0, 120).trim();
+      var ready = isRowReady(row);
+      console.log('[Datarova Bulk]   row[' + i + '] ready=' + ready + ' text:', rowText);
 
-      if (!isRowReady(row)) {
+      if (!ready) {
         skipped++;
         continue;
       }
 
       var downloadBtn = findDownloadButton(row);
       if (!downloadBtn) {
+        console.log('[Datarova Bulk]   row[' + i + '] no download button found');
         skipped++;
         continue;
       }
 
+      console.log('[Datarova Bulk]   row[' + i + '] clicking download button');
       downloadBtn.click();
       downloaded++;
       await sleep(1500);
     }
 
+    console.log('[Datarova Bulk] downloadReadyReports result: downloaded=' + downloaded +
+      ' skipped=' + skipped + ' total=' + targetRows.length);
     return { downloaded: downloaded, skipped: skipped, total: targetRows.length };
+  }
+
+  function checkReportStatus(count) {
+    var table = document.querySelector('table.MuiTable-root, table');
+    if (!table) {
+      console.log('[Datarova Bulk] checkReportStatus: no table found');
+      return { readyCount: 0, pendingCount: 0, totalCount: 0 };
+    }
+
+    var rows = table.querySelectorAll('tbody tr[id^="body-row-"]');
+    if (rows.length === 0) rows = table.querySelectorAll('tbody tr');
+
+    var targetRows = Array.from(rows).slice(0, count || rows.length);
+    var readyCount = 0;
+    var pendingCount = 0;
+
+    for (var i = 0; i < targetRows.length; i++) {
+      if (isRowReady(targetRows[i])) readyCount++;
+      else if (isRowPending(targetRows[i])) pendingCount++;
+    }
+
+    console.log('[Datarova Bulk] checkReportStatus: ready=' + readyCount +
+      ' pending=' + pendingCount + ' total=' + targetRows.length);
+
+    return {
+      readyCount: readyCount,
+      pendingCount: pendingCount,
+      totalCount: targetRows.length,
+    };
   }
 
   function isRowReady(row) {
@@ -322,6 +381,20 @@
     for (var c = 0; c < cells.length; c++) {
       var text = (cells[c].textContent || '').trim().toLowerCase();
       if (text === 'ready' || text.includes('ready')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function isRowPending(row) {
+    var cells = row.querySelectorAll('td');
+    for (var c = 0; c < cells.length; c++) {
+      var text = (cells[c].textContent || '').trim().toLowerCase();
+      if (text === 'pending' || text.includes('pending') ||
+          text === 'processing' || text.includes('processing') ||
+          text === 'generating' || text.includes('generating') ||
+          text === 'queued' || text.includes('queued')) {
         return true;
       }
     }
@@ -425,6 +498,22 @@
       triggerExport()
         .then(function () { sendResponse({ success: true }); })
         .catch(function (err) { sendResponse({ success: false, error: err.message }); });
+      return true;
+    }
+
+    if (message.action === 'ping') {
+      sendResponse({ pong: true });
+      return true;
+    }
+
+    if (message.action === 'checkReportStatus') {
+      try {
+        var status = checkReportStatus(message.count);
+        sendResponse(status);
+      } catch (err) {
+        console.error('[Datarova Bulk] checkReportStatus failed:', err);
+        sendResponse({ readyCount: 0, pendingCount: 0, totalCount: 0, error: err.message });
+      }
       return true;
     }
 
