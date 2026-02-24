@@ -368,6 +368,11 @@
 
     var rowText = (row.textContent || '').toLowerCase();
 
+    // First check: row must contain today's date (Request Sent column)
+    if (!isRowFromToday(row)) {
+      return false;
+    }
+
     for (var i = 0; i < exportedProjects.length; i++) {
       var project = exportedProjects[i];
       // Match by project name (partial match, case insensitive)
@@ -387,6 +392,45 @@
 
     return false;
   }
+
+  function isRowFromToday(row) {
+    var today = new Date();
+    var cells = row.querySelectorAll('td');
+    var rowText = (row.textContent || '');
+
+    // Build multiple date format strings to match against:
+    // "Feb 24, 2026", "2/24/2026", "24/02/2026", "2026-02-24", "02/24/2026"
+    var months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+    var monthsFull = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+    var m = today.getMonth(); // 0-indexed
+    var d = today.getDate();
+    var y = today.getFullYear();
+
+    var datePatterns = [
+      months[m] + ' ' + d + ', ' + y,            // "feb 24, 2026"
+      months[m] + ' ' + d + ' ' + y,             // "feb 24 2026"
+      monthsFull[m] + ' ' + d + ', ' + y,        // "february 24, 2026"
+      monthsFull[m] + ' ' + d + ' ' + y,         // "february 24 2026"
+      (m + 1) + '/' + d + '/' + y,               // "2/24/2026"
+      pad(m + 1) + '/' + pad(d) + '/' + y,       // "02/24/2026"
+      d + '/' + pad(m + 1) + '/' + y,            // "24/02/2026"
+      pad(d) + '/' + pad(m + 1) + '/' + y,       // "24/02/2026"
+      y + '-' + pad(m + 1) + '-' + pad(d),       // "2026-02-24"
+      months[m] + ' ' + pad(d) + ', ' + y,       // "feb 04, 2026" (padded day)
+    ];
+
+    var rowLower = rowText.toLowerCase();
+    for (var i = 0; i < datePatterns.length; i++) {
+      if (rowLower.includes(datePatterns[i])) {
+        return true;
+      }
+    }
+
+    console.log('[Datarova Bulk]   isRowFromToday: no date match in:', rowText.substring(0, 100));
+    return false;
+  }
+
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
   function simulateClick(el) {
     // Use both native click and MouseEvent for maximum compatibility with React/MUI
