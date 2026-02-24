@@ -755,49 +755,67 @@
   }
 
   /**
-   * After clicking "Generate Download", a dialog appears asking which
-   * download type (Simple View / Comprehensive).  Select "Simple View"
-   * and click the "Generate Download" confirmation button.
+   * After clicking "Generate Download", a kat-modal dialog appears asking
+   * which download type (Simple View / Comprehensive).  Select "Simple View"
+   * and click the modal's own "Generate Download" confirmation button.
+   *
+   * DOM structure (from inspect):
+   *   <kat-modal>
+   *     #shadow-root  →  <div role="dialog">
+   *     <div slot="content">  →  radio buttons for Simple / Comprehensive
+   *     <div slot="footer">
+   *       <kat-button id="downloadModalGenerateDownloadButton" label="Generate Download" variant="primary">
+   *         #shadow-root  →  <button class="button">
    */
   async function handleDownloadTypeDialog() {
-    // Wait for dialog to appear
+    // Wait for modal to appear
     await sleep(2000);
 
-    // ----- 1. Find the dialog (light DOM + shadow DOM) -----
-    const dialogSelectors = [
-      '[role="dialog"]', '.modal', '[class*="modal"]', '[class*="Modal"]',
-      '[class*="download-type"]', '[class*="downloadType"]',
-      '[class*="popover"]', '[class*="Popover"]'
-    ];
+    // ----- 1. Find the kat-modal or dialog -----
+    // Try the kat-modal element first (Amazon's web component)
+    let modal = document.querySelector('kat-modal[visible]') ||
+                document.querySelector('kat-modal');
 
-    let dialog = null;
-    for (const sel of dialogSelectors) {
-      const el = querySelectorDeep(sel);
-      if (el && isVisible(el)) { dialog = el; break; }
+    // Check if the kat-modal is actually visible / open
+    if (modal) {
+      const shadowDialog = modal.shadowRoot?.querySelector('[role="dialog"]');
+      if (!shadowDialog || !isVisible(shadowDialog)) {
+        // kat-modal exists but isn't open — try deep search
+        modal = null;
+      }
     }
 
-    if (!dialog) {
+    if (!modal) {
+      // Fallback: any visible dialog
+      const fallback = querySelectorDeep('[role="dialog"]');
+      if (fallback && isVisible(fallback)) {
+        modal = fallback;
+      }
+    }
+
+    if (!modal) {
       baLog('  No download-type dialog detected — download may have started directly');
       return true;
     }
 
+    baLog('  Download type dialog detected');
+
     // ----- 2. Select "Simple View" radio -----
-    // Search inside dialog and also broadly via deep traversal
+    // Radio buttons are slotted into the kat-modal as light DOM children
     const radioSources = [
-      ...dialog.querySelectorAll(
-        '[role="radio"], [role="option"], input[type="radio"], label, ' +
-        '[class*="option"], [class*="radio"], kat-radio-button, kat-radiobutton'
+      ...modal.querySelectorAll(
+        'kat-radio-button, kat-radiobutton, [role="radio"], input[type="radio"], label, ' +
+        '[class*="radio"], [class*="option"]'
       ),
-      ...querySelectorAllDeep('[role="radio"], kat-radio-button, kat-radiobutton')
+      // Also search the kat-modal's shadow root
+      ...(modal.shadowRoot ? modal.shadowRoot.querySelectorAll(
+        'kat-radio-button, kat-radiobutton, [role="radio"], input[type="radio"]'
+      ) : [])
     ];
 
-    const seen = new Set();
     for (const opt of radioSources) {
-      if (seen.has(opt)) continue;
-      seen.add(opt);
       const text = (opt.textContent || opt.value || opt.getAttribute('label') || '').toLowerCase();
       if (text.includes('simple')) {
-        // Click the radio input inside, or the element itself
         const radio = opt.querySelector('input[type="radio"]') ||
                       opt.shadowRoot?.querySelector('input[type="radio"]') ||
                       opt;
@@ -808,33 +826,58 @@
       }
     }
 
-    // ----- 3. Click "Generate Download" confirmation button -----
-    const confirmSources = [
-      ...dialog.querySelectorAll('button, kat-button, [role="button"]'),
-      ...querySelectorAllDeep('button, kat-button, [role="button"]')
-    ];
+    // ----- 3. Click the modal's "Generate Download" confirmation button -----
 
-    const seenBtns = new Set();
-    for (const el of confirmSources) {
-      if (seenBtns.has(el)) continue;
-      seenBtns.add(el);
-      const text = (el.textContent || el.getAttribute('label') || '').toLowerCase().trim();
-      if (text.includes('generate download') || text.includes('generate report')) {
-        const inner = el.shadowRoot?.querySelector('button') || el;
+    // Direct ID lookup — the modal's confirm button has a specific ID
+    const modalGenBtn = modal.querySelector('#downloadModalGenerateDownloadButton') ||
+                        querySelectorDeep('#downloadModalGenerateDownloadButton');
+    if (modalGenBtn) {
+      const inner = modalGenBtn.shadowRoot?.querySelector('button') || modalGenBtn;
+      inner.click();
+      baLog('  Clicked "Generate Download" in modal (by ID)');
+      await sleep(2000);
+      return true;
+    }
+
+    // Fallback: find a kat-button with label="Generate Download" inside the modal
+    const katBtns = modal.querySelectorAll('kat-button');
+    for (const kb of katBtns) {
+      const lbl = (kb.getAttribute('label') || '').toLowerCase();
+      if (lbl.includes('generate download') || lbl.includes('generate report')) {
+        const inner = kb.shadowRoot?.querySelector('button') || kb;
         inner.click();
-        baLog('  Clicked "Generate Download" in dialog');
+        baLog('  Clicked "Generate Download" in modal (kat-button label)');
         await sleep(2000);
         return true;
       }
     }
 
-    // Broader fallback — any generate/download/confirm button inside the dialog
-    for (const btn of dialog.querySelectorAll('button, kat-button, [role="button"]')) {
-      const text = (btn.textContent || btn.getAttribute('label') || '').toLowerCase().trim();
-      if (text.includes('generate') || text.includes('download') || text.includes('confirm')) {
-        const inner = btn.shadowRoot?.querySelector('button') || btn;
+    // Broader fallback: any button with matching text inside modal footer slot
+    const footerSlot = modal.querySelector('[slot="footer"]');
+    if (footerSlot) {
+      const btns = footerSlot.querySelectorAll('button, kat-button, [role="button"]');
+      for (const btn of btns) {
+        const text = (btn.textContent || btn.getAttribute('label') || '').toLowerCase().trim();
+        if (text.includes('generate') || text.includes('download')) {
+          const inner = btn.shadowRoot?.querySelector('button') || btn;
+          inner.click();
+          baLog('  Clicked confirm button in modal footer');
+          await sleep(2000);
+          return true;
+        }
+      }
+    }
+
+    // Last resort: deep search for any generate/download button that is NOT the
+    // outer trigger (which has id="GenerateDownloadButton")
+    const allBtns = querySelectorAllDeep('button, kat-button');
+    for (const el of allBtns) {
+      if (el.id === 'GenerateDownloadButton') continue; // skip the outer trigger
+      const text = (el.textContent || el.getAttribute('label') || '').toLowerCase().trim();
+      if (text.includes('generate download') && isVisible(el)) {
+        const inner = el.shadowRoot?.querySelector('button') || el;
         inner.click();
-        baLog('  Clicked confirm button in dialog');
+        baLog('  Clicked "Generate Download" (deep search fallback)');
         await sleep(2000);
         return true;
       }
