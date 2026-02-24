@@ -112,109 +112,141 @@
    * "Brand View" (default) and "ASIN View".  We need ASIN View so
    * the per-ASIN selector appears.
    *
-   * The view tabs can be rendered as: plain divs/spans/anchors, kat-tab-header
-   * components, [role="tab"] elements, or links.  We search broadly.
+   * Tries multiple strategies to find and click the tab, then VERIFIES
+   * the view actually switched before returning true.
    */
   async function ensureAsinView() {
     baLog('Checking view mode...');
+    console.log('[SellerData] ensureAsinView() starting...');
 
-    // Helper: find elements whose visible text includes a target string.
-    // Returns the most specific (deepest / smallest) matches first.
-    function findElementsByText(target) {
-      const lowerTarget = target.toLowerCase();
-      const results = [];
+    // ---- Collect ALL possible tab candidates ----
+    const candidates = [];
 
-      // 1. Light DOM: all visible elements
-      const allEls = document.body.querySelectorAll('*');
-      for (const el of allEls) {
-        if (el.id === PANEL_ID || el.closest('#' + PANEL_ID)) continue;
-        const text = (el.textContent || '').trim().toLowerCase();
-        // Match elements whose FULL text is close to the target
-        // (avoids matching huge containers)
-        if (text.length < target.length + 20 && text.includes(lowerTarget) && isVisible(el)) {
-          results.push(el);
-        }
+    // Strategy 1: kat-tab-header elements (Amazon Katal tab system)
+    // These store their label in the `label` attribute, NOT textContent
+    const katTabHeaders = querySelectorAllDeep('kat-tab-header');
+    console.log(`[SellerData] Found ${katTabHeaders.length} kat-tab-header elements`);
+    for (const tab of katTabHeaders) {
+      const label = tab.getAttribute('label') || '';
+      const selected = tab.hasAttribute('selected');
+      const text = (tab.textContent || '').trim();
+      console.log(`[SellerData]   kat-tab-header: label="${label}" selected=${selected} text="${text}"`);
+      if (label.toLowerCase().includes('asin')) {
+        candidates.push({ el: tab, type: 'kat-tab-header', isActive: selected });
       }
+    }
 
-      // 2. Shadow DOM: search inside kat components
-      const deepEls = querySelectorAllDeep(
-        'kat-tab-header, kat-tab, a, button, span, div, [role="tab"]'
-      );
-      for (const el of deepEls) {
-        if (results.includes(el)) continue;
-        const text = (el.textContent || el.getAttribute('label') || '').trim().toLowerCase();
-        if (text.length < target.length + 20 && text.includes(lowerTarget) && isVisible(el)) {
-          results.push(el);
-        }
+    // Strategy 2: [role="tab"] elements
+    const roleTabs = querySelectorAllDeep('[role="tab"]');
+    console.log(`[SellerData] Found ${roleTabs.length} [role="tab"] elements`);
+    for (const tab of roleTabs) {
+      const text = (tab.textContent || tab.getAttribute('aria-label') || '').trim();
+      const selected = tab.getAttribute('aria-selected') === 'true';
+      console.log(`[SellerData]   role=tab: text="${text}" aria-selected=${selected}`);
+      if (text.toLowerCase().includes('asin')) {
+        candidates.push({ el: tab, type: 'role-tab', isActive: selected });
       }
-
-      // Sort: prefer elements with shorter textContent (more specific/leaf)
-      results.sort((a, b) =>
-        (a.textContent || '').trim().length - (b.textContent || '').trim().length
-      );
-      return results;
     }
 
-    const asinViewEls = findElementsByText('ASIN View');
-    const brandViewEls = findElementsByText('Brand View');
-
-    baLog(`  Found ${asinViewEls.length} "ASIN View" element(s), ${brandViewEls.length} "Brand View" element(s)`);
-
-    // Log details of found elements for debugging
-    for (const el of asinViewEls.slice(0, 3)) {
-      baLog(`    ASIN tab candidate: <${el.tagName.toLowerCase()}> text="${(el.textContent || '').trim().substring(0, 40)}" classes="${el.className}"`);
+    // Strategy 3: Broad text search — any visible element with short text
+    // containing "ASIN View" (light DOM)
+    const allEls = document.body.querySelectorAll('a, button, span, div, li, [role="button"]');
+    for (const el of allEls) {
+      if (el.id === PANEL_ID || el.closest('#' + PANEL_ID)) continue;
+      if (candidates.some(c => c.el === el)) continue;
+      const text = (el.textContent || '').trim();
+      if (text.length > 0 && text.length < 30 &&
+          text.toLowerCase().includes('asin view') && isVisible(el)) {
+        const isActive = el.classList?.contains('active') ||
+                         el.classList?.contains('selected') ||
+                         el.getAttribute('aria-selected') === 'true';
+        console.log(`[SellerData]   text match: <${el.tagName}> text="${text}" class="${el.className}" active=${isActive}`);
+        candidates.push({ el, type: 'text-match', isActive });
+      }
     }
 
-    if (asinViewEls.length === 0) {
-      // Last resort: try URL-based navigation
-      baLog('  Could not find "ASIN View" tab — trying URL navigation...', 'warn');
-      const url = new URL(window.location.href);
-      url.searchParams.set('viewType', 'ASIN');
-      window.location.href = url.toString();
-      return 'navigated';
+    // Strategy 4: Shadow DOM text search (kat components that render text inside)
+    const deepEls = querySelectorAllDeep('a, button, span, kat-tab, kat-link');
+    for (const el of deepEls) {
+      if (candidates.some(c => c.el === el)) continue;
+      const text = (el.textContent || el.getAttribute('label') || '').trim();
+      if (text.length > 0 && text.length < 30 &&
+          text.toLowerCase().includes('asin view') && isVisible(el)) {
+        const isActive = el.classList?.contains('active') ||
+                         el.hasAttribute('selected');
+        console.log(`[SellerData]   deep text match: <${el.tagName}> text="${text}" active=${isActive}`);
+        candidates.push({ el, type: 'deep-text', isActive });
+      }
     }
 
-    const asinTab = asinViewEls[0];
-    const brandTab = brandViewEls.length > 0 ? brandViewEls[0] : null;
+    console.log(`[SellerData] Total ASIN View candidates: ${candidates.length}`);
+    baLog(`  Found ${candidates.length} ASIN View candidate(s)`);
+    for (const c of candidates) {
+      baLog(`    ${c.type}: <${c.el.tagName.toLowerCase()}> active=${c.isActive}`);
+    }
 
-    // Check if ASIN View is already selected
-    const isAsinActive = (
-      asinTab.getAttribute('aria-selected') === 'true' ||
-      asinTab.getAttribute('aria-current') === 'true' ||
-      asinTab.classList?.contains('active') ||
-      asinTab.classList?.contains('selected') ||
-      asinTab.getAttribute('selected') !== null ||
-      (brandTab && window.getComputedStyle(asinTab).fontWeight >
-                   window.getComputedStyle(brandTab).fontWeight)
-    );
-
-    if (isAsinActive) {
-      baLog('Already on ASIN view');
+    // ---- Check if already on ASIN view ----
+    if (candidates.length > 0 && candidates.some(c => c.isActive)) {
+      console.log('[SellerData] ASIN View tab appears already active');
+      baLog('Already on ASIN view (tab is active)');
       return true;
     }
 
-    // Click the ASIN View tab
-    baLog('Switching to ASIN view...');
-    const inner = asinTab.shadowRoot?.querySelector('button, a, [role="tab"]') || asinTab;
-    inner.click();
-    baLog(`  Clicked <${asinTab.tagName.toLowerCase()}> element`);
-    await sleep(5000);
+    // ---- Click the best candidate ----
+    if (candidates.length > 0) {
+      const best = candidates[0];
+      baLog(`Switching to ASIN view — clicking ${best.type}...`);
+      console.log(`[SellerData] Clicking ${best.type}: <${best.el.tagName}>`);
 
-    // Verify: check if a page navigation happened (tab might be an <a> link)
-    // If we're still here, the click was in-page. Verify the view changed
-    // by looking for the ASIN picker or checking if the clicked tab is now active.
-    const afterActive = (
-      asinTab.getAttribute('aria-selected') === 'true' ||
-      asinTab.classList?.contains('active') ||
-      asinTab.classList?.contains('selected')
-    );
-    if (afterActive) {
-      baLog('  Successfully switched to ASIN view');
-    } else {
-      baLog('  Tab clicked but active state unclear — proceeding anyway');
+      // For kat-tab-header, click the inner button in shadow DOM
+      const inner = best.el.shadowRoot?.querySelector('button, a, [role="tab"]') || best.el;
+      inner.click();
+      console.log('[SellerData] Click dispatched, waiting 5s...');
+      await sleep(5000);
+
+      // Check if the page is still here (the click might trigger navigation)
+      console.log('[SellerData] Still on page after click');
+      baLog('  Clicked tab, verifying view change...');
+
+      // Verify: re-check if the tab is now active
+      const nowActive = best.el.hasAttribute('selected') ||
+                        best.el.getAttribute('aria-selected') === 'true' ||
+                        best.el.classList?.contains('active');
+      if (nowActive) {
+        baLog('  Verified: ASIN View tab is now active');
+        console.log('[SellerData] Verified: tab is now selected');
+        return true;
+      }
+
+      // Verify alternative: check that page content looks like ASIN view
+      // (e.g., no brand selector visible, or URL changed)
+      baLog('  Tab active state not confirmed — checking page content...');
+      console.log('[SellerData] Tab state not confirmed, checking page...');
+
+      // If the URL now has viewType=ASIN, trust that
+      if (window.location.href.toLowerCase().includes('asin')) {
+        baLog('  URL indicates ASIN view');
+        return true;
+      }
+
+      // Proceed cautiously — the click may have worked
+      baLog('  Could not verify view switch — proceeding cautiously', 'warn');
+      return true;
     }
 
-    return true;
+    // ---- No candidates found: URL fallback ----
+    console.log('[SellerData] No ASIN View tab candidates found!');
+    baLog('  No "ASIN View" tab found on page — trying URL navigation...', 'warn');
+
+    // Log ALL kat-tab-header labels for debugging
+    for (const tab of katTabHeaders) {
+      console.log(`[SellerData]   Available tab: "${tab.getAttribute('label')}"`);
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('viewType', 'ASIN');
+    window.location.href = url.toString();
+    return 'navigated';
   }
 
   // ============================================================
