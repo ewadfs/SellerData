@@ -369,12 +369,17 @@
     var rowText = (row.textContent || '').toLowerCase();
 
     // First check: row must contain today's date (Request Sent column)
-    if (!isRowFromToday(row)) {
+    var dateOk = isRowFromToday(row);
+    if (!dateOk) {
       return false;
     }
 
     for (var i = 0; i < exportedProjects.length; i++) {
       var project = exportedProjects[i];
+      // Match by ASIN first (most reliable)
+      if (project.asin && rowText.includes(project.asin.toLowerCase())) {
+        return true;
+      }
       // Match by project name (partial match, case insensitive)
       if (project.name) {
         var name = project.name.toLowerCase();
@@ -386,8 +391,15 @@
           if (allMatch) return true;
         }
       }
-      // Match by ASIN
-      if (project.asin && rowText.includes(project.asin.toLowerCase())) return true;
+    }
+
+    // Log first non-match for debugging (only once)
+    if (!doesRowMatchExportedProject._logged) {
+      doesRowMatchExportedProject._logged = true;
+      console.log('[Datarova Bulk]   NO MATCH row text (first 200):', rowText.substring(0, 200));
+      console.log('[Datarova Bulk]   looking for:', exportedProjects.map(function (p) {
+        return p.name + '/' + p.asin;
+      }).join(', '));
     }
 
     return false;
@@ -510,14 +522,34 @@
   async function checkReportStatus(count, exportedProjects) {
     var table = await waitForElement('table.MuiTable-root, table', 8000);
     if (!table) {
-      console.log('[Datarova Bulk] checkReportStatus: no table found');
+      console.log('[Datarova Bulk] checkReportStatus: no table found on page');
       return { readyCount: 0, pendingCount: 0, totalCount: 0 };
     }
 
-    var rows = table.querySelectorAll('tbody tr[id^="body-row-"]');
-    if (rows.length === 0) rows = table.querySelectorAll('tbody tr');
+    // Wait for rows to actually populate (table shell loads before data)
+    var rows;
+    for (var w = 0; w < 16; w++) {
+      rows = table.querySelectorAll('tbody tr[id^="body-row-"]');
+      if (rows.length === 0) rows = table.querySelectorAll('tbody tr');
+      if (rows.length > 0) break;
+      console.log('[Datarova Bulk] checkReportStatus: waiting for rows... attempt', w + 1);
+      await sleep(500);
+    }
 
-    var allRows = Array.from(rows);
+    var allRows = Array.from(rows || []);
+    console.log('[Datarova Bulk] checkReportStatus: found', allRows.length, 'rows,',
+      'exportedProjects:', JSON.stringify(exportedProjects));
+
+    // Log first 3 rows for debugging
+    for (var d = 0; d < Math.min(3, allRows.length); d++) {
+      var cells = allRows[d].querySelectorAll('td');
+      var cellTexts = [];
+      for (var c = 0; c < cells.length; c++) {
+        cellTexts.push((cells[c].textContent || '').trim().substring(0, 40));
+      }
+      console.log('[Datarova Bulk]   sample row[' + d + ']:', cellTexts.join(' | '));
+    }
+
     var readyCount = 0;
     var pendingCount = 0;
     var matchedCount = 0;
