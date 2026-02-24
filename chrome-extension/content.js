@@ -620,7 +620,85 @@
       }
     }
 
+    // If we only found header rows, do DOM forensics: find elements containing
+    // exported ASINs and trace their row-like ancestor
+    if (bestRows.length <= 1) {
+      console.log('[Datarova Bulk] findDataRows: standard selectors found <= 1 row, doing DOM forensics');
+      var asinRows = findRowsByAsinText();
+      if (asinRows.length > bestRows.length) {
+        bestRows = asinRows;
+      }
+    }
+
     return bestRows;
+  }
+
+  // DOM forensics: use TreeWalker to find text nodes containing ASIN patterns
+  // (B0xxxxxxxxx), then walk up to find the repeating row-like container.
+  function findRowsByAsinText() {
+    var asinPattern = /\bB0[A-Z0-9]{8,}\b/;
+
+    // Find ALL text nodes containing an ASIN
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (node) {
+        return asinPattern.test(node.textContent) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      }
+    });
+
+    var asinElements = [];
+    while (walker.nextNode()) {
+      var el = walker.currentNode.parentElement;
+      if (el) asinElements.push(el);
+      if (asinElements.length >= 5) break; // enough samples
+    }
+
+    if (asinElements.length === 0) {
+      console.log('[Datarova Bulk] findRowsByAsinText: no ASIN text found in DOM');
+      return [];
+    }
+
+    // Log the parent chain of the first ASIN element for debugging
+    var first = asinElements[0];
+    var chain = [];
+    var ancestor = first;
+    for (var depth = 0; depth < 10 && ancestor && ancestor !== document.body; depth++) {
+      chain.push(ancestor.tagName +
+        (ancestor.className ? '.' + (ancestor.className + '').substring(0, 40) : '') +
+        (ancestor.getAttribute('role') ? '[role=' + ancestor.getAttribute('role') + ']' : ''));
+      ancestor = ancestor.parentElement;
+    }
+    console.log('[Datarova Bulk] findRowsByAsinText: ASIN parent chain:', chain.join(' > '));
+
+    // Find the common row-like ancestor: walk up from each ASIN element until we find
+    // an element that is a sibling-repeated pattern (i.e., its parent has many children
+    // of the same tagName/className)
+    var rowElements = [];
+    var rowParent = null;
+
+    for (var i = 0; i < asinElements.length; i++) {
+      var candidate = asinElements[i];
+      for (var up = 0; up < 8 && candidate && candidate !== document.body; up++) {
+        var parent = candidate.parentElement;
+        if (!parent) break;
+        // Check if parent has multiple children with the same tag
+        var siblings = parent.querySelectorAll(':scope > ' + candidate.tagName);
+        if (siblings.length >= 3) {
+          // This looks like a row container
+          rowParent = parent;
+          console.log('[Datarova Bulk] findRowsByAsinText: row container found: ' +
+            parent.tagName + '.' + (parent.className + '').substring(0, 60) +
+            ' with ' + siblings.length + ' children of type ' + candidate.tagName);
+          // Return ALL children of this parent as "rows"
+          rowElements = Array.from(siblings);
+          break;
+        }
+        candidate = parent;
+      }
+      if (rowElements.length > 0) break;
+    }
+
+    console.log('[Datarova Bulk] findRowsByAsinText: returning', rowElements.length, 'rows');
+    return rowElements;
   }
 
   function getCells(row) {
