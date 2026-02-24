@@ -636,6 +636,55 @@
     return null;
   }
 
+  // ── SPA Navigation (for download page) ─────────────────────────────────
+
+  async function navigateToDownloadPage() {
+    console.log('[Datarova Bulk] navigateToDownloadPage: current URL:', location.href);
+
+    // Strategy 1: Find and click a nav link to /download-report
+    var links = document.querySelectorAll('a[href*="download-report"], a[href*="download_report"]');
+    for (var i = 0; i < links.length; i++) {
+      console.log('[Datarova Bulk]   found download link:', links[i].href);
+      links[i].click();
+      await sleep(2000);
+      if (location.pathname.includes('download')) {
+        console.log('[Datarova Bulk]   navigated via link click to:', location.href);
+        return;
+      }
+    }
+
+    // Strategy 2: Find any nav/sidebar link with "download" text
+    var allLinks = document.querySelectorAll('a');
+    for (var j = 0; j < allLinks.length; j++) {
+      var text = (allLinks[j].textContent || '').trim().toLowerCase();
+      var href = (allLinks[j].getAttribute('href') || '').toLowerCase();
+      if ((text.includes('download') && text.includes('report')) ||
+          href.includes('download')) {
+        console.log('[Datarova Bulk]   found download link by text:', text, 'href:', href);
+        allLinks[j].click();
+        await sleep(2000);
+        if (location.pathname.includes('download')) {
+          console.log('[Datarova Bulk]   navigated via text link to:', location.href);
+          return;
+        }
+      }
+    }
+
+    // Strategy 3: Use history.pushState + popstate (triggers React Router)
+    console.log('[Datarova Bulk]   trying pushState navigation to /download-report');
+    window.history.pushState({}, '', '/download-report');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await sleep(2000);
+
+    if (location.pathname.includes('download')) {
+      console.log('[Datarova Bulk]   navigated via pushState to:', location.href);
+      return;
+    }
+
+    console.log('[Datarova Bulk]   SPA navigation failed, current URL:', location.href);
+    throw new Error('Could not navigate to download page via SPA');
+  }
+
   // ── Utility Functions ───────────────────────────────────────────────────
 
   function findButtonByText(searchText) {
@@ -704,6 +753,13 @@
 
     if (message.action === 'ping') {
       sendResponse({ pong: true });
+      return true;
+    }
+
+    if (message.action === 'navigateToDownloads') {
+      navigateToDownloadPage()
+        .then(function () { sendResponse({ success: true }); })
+        .catch(function (err) { sendResponse({ success: false, error: err.message }); });
       return true;
     }
 

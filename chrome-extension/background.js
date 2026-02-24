@@ -114,16 +114,13 @@ async function handleBulkExport(projects, tabId, returnUrl) {
 // ── Phase 2: Download with Polling ──────────────────────────────────────
 
 async function downloadWithPolling(tabId, returnUrl, expectedCount, exportedProjects) {
-  const downloadUrl = buildDownloadUrl(returnUrl);
   const startTime = Date.now();
+
+  // Navigate to the download page via SPA routing (avoids 404 on full page load)
+  await navigateToDownloadPage(tabId, returnUrl);
 
   for (let attempt = 0; Date.now() - startTime < REPORT_POLL_MAX_MS; attempt++) {
     console.log('[Datarova BG] Download poll attempt', attempt + 1);
-
-    // Navigate (or refresh) to download page
-    await navigateTab(tabId, downloadUrl);
-    await sleep(PAGE_LOAD_WAIT_MS);
-    await waitForContentScript(tabId);
 
     // Check report status (filtered by exported projects)
     const status = await sendMessageToTab(tabId, {
@@ -136,6 +133,8 @@ async function downloadWithPolling(tabId, returnUrl, expectedCount, exportedProj
     if (!status) {
       console.warn('[Datarova BG] No status response, retrying...');
       await sleep(REPORT_POLL_INTERVAL_MS);
+      // Re-navigate on failure
+      await navigateToDownloadPage(tabId, returnUrl);
       continue;
     }
 
@@ -172,14 +171,13 @@ async function downloadWithPolling(tabId, returnUrl, expectedCount, exportedProj
     console.log('[Datarova BG] Not ready yet (ready=' + readyCount +
       ' pending=' + pendingCount + '), waiting ' + (REPORT_POLL_INTERVAL_MS / 1000) + 's...');
     await sleep(REPORT_POLL_INTERVAL_MS);
+
+    // Refresh the page for the next poll (SPA re-navigation)
+    await navigateToDownloadPage(tabId, returnUrl);
   }
 
   // Timeout: try to download whatever is ready
   console.log('[Datarova BG] Poll timeout reached, downloading whatever is ready');
-  await navigateTab(tabId, downloadUrl);
-  await sleep(PAGE_LOAD_WAIT_MS);
-  await waitForContentScript(tabId);
-
   const dlResp = await sendMessageToTab(tabId, {
     action: 'downloadReports',
     count: expectedCount,
@@ -195,6 +193,29 @@ async function downloadWithPolling(tabId, returnUrl, expectedCount, exportedProj
       'Reports not ready after ' + (REPORT_POLL_MAX_MS / 1000) + 's',
       false, 'Timeout waiting for reports', 0, expectedCount);
   }
+}
+
+// Navigate to the download page using SPA routing (content script clicks
+// the in-app link). Falls back to full page load if SPA nav fails.
+async function navigateToDownloadPage(tabId, returnUrl) {
+  try {
+    await waitForContentScript(tabId);
+    const resp = await sendMessageToTab(tabId, { action: 'navigateToDownloads' });
+    if (resp && resp.success) {
+      console.log('[Datarova BG] SPA navigation to download page succeeded');
+      await sleep(PAGE_LOAD_WAIT_MS);
+      return;
+    }
+  } catch (e) {
+    console.warn('[Datarova BG] SPA navigation failed:', e.message);
+  }
+
+  // Fallback: full page navigation (may 404 on some SPAs)
+  console.log('[Datarova BG] Falling back to full page navigation');
+  const downloadUrl = buildDownloadUrl(returnUrl);
+  await navigateTab(tabId, downloadUrl);
+  await sleep(PAGE_LOAD_WAIT_MS);
+  await waitForContentScript(tabId);
 }
 
 // ── Content Script Readiness ────────────────────────────────────────────
