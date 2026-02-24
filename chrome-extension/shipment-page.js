@@ -364,12 +364,14 @@
 
   // Keep tooltip alive when mouse moves onto it
   document.addEventListener('mouseenter', (e) => {
-    if (e.target.id === TOOLTIP_ID || e.target.closest('#' + TOOLTIP_ID)) {
+    const target = e.target;
+    if (target && target.nodeType === 1 && (target.id === TOOLTIP_ID || target.closest?.('#' + TOOLTIP_ID))) {
       clearTimeout(hoverTimeout);
     }
   }, true);
   document.addEventListener('mouseleave', (e) => {
-    if (e.target.id === TOOLTIP_ID || e.target.closest('#' + TOOLTIP_ID)) {
+    const target = e.target;
+    if (target && target.nodeType === 1 && (target.id === TOOLTIP_ID || target.closest?.('#' + TOOLTIP_ID))) {
       setTimeout(removeTooltip, 150);
     }
   }, true);

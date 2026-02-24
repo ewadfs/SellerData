@@ -64,6 +64,45 @@
     return rect.width > 0 && rect.height > 0;
   }
 
+  /**
+   * Query selector that traverses into open shadow DOM boundaries.
+   * Amazon's kat-* web components use shadow DOM extensively.
+   */
+  function querySelectorDeep(selector, root = document) {
+    const result = root.querySelector(selector);
+    if (result) return result;
+    const allElements = root.querySelectorAll('*');
+    for (const el of allElements) {
+      if (el.shadowRoot) {
+        const found = querySelectorDeep(selector, el.shadowRoot);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  function querySelectorAllDeep(selector, root = document) {
+    const results = [...root.querySelectorAll(selector)];
+    const allElements = root.querySelectorAll('*');
+    for (const el of allElements) {
+      if (el.shadowRoot) {
+        results.push(...querySelectorAllDeep(selector, el.shadowRoot));
+      }
+    }
+    return results;
+  }
+
+  /**
+   * Get the inner <input> from a shadow-DOM web component (e.g. kat-predictive-input).
+   */
+  function getShadowInput(el) {
+    if (!el) return null;
+    if (el.shadowRoot) {
+      return el.shadowRoot.querySelector('input, textarea') || el;
+    }
+    return el.querySelector('input, textarea') || el;
+  }
+
   // ============================================================
   // ASIN DISCOVERY
   // ============================================================
@@ -119,6 +158,16 @@
    * Find the ASIN selector control on the page.
    */
   function findAsinSelector() {
+    // Priority 1: Amazon's kat-predictive-input for ASIN (exact matches first)
+    const katPredictive = document.querySelector(
+      'kat-predictive-input#asin, ' +
+      'kat-predictive-input[data-test-id="PredictiveTextFilter"], ' +
+      'kat-predictive-input[data-test-id*="asin" i], ' +
+      'kat-predictive-input[data-test-id*="product" i], ' +
+      'kat-predictive-input[id*="asin" i]'
+    );
+    if (katPredictive) return katPredictive;
+
     const selectors = [
       'select[data-testid*="asin"], select[name*="asin"], select[id*="asin"]',
       '[data-testid*="asin-select"], [data-testid*="asin-picker"], [data-testid*="asin-dropdown"]',
@@ -129,6 +178,8 @@
       // Amazon custom elements (broader matches)
       'kat-combobox[data-testid*="asin"], kat-combobox[data-testid*="product"]',
       'kat-dropdown[data-testid*="product"], kat-select[data-testid*="product"]',
+      // Amazon's predictive input (broader)
+      'kat-predictive-input',
       // Data-cy attributes (React testing)
       '[data-cy*="asin" i], [data-cy*="product-select" i]',
       // Amazon often uses a combobox pattern for ASIN search
@@ -172,6 +223,12 @@
       return asins;
     }
 
+    // If it's Amazon's kat-predictive-input (shadow DOM component)
+    if (selector.tagName === 'KAT-PREDICTIVE-INPUT') {
+      const innerInput = getShadowInput(selector);
+      return await extractAsinsFromPredictiveInput(selector, innerInput);
+    }
+
     // If it's a search/combobox input, try to open it and read options
     if (selector.tagName === 'INPUT') {
       return await extractAsinsFromSearchInput(selector);
@@ -188,6 +245,58 @@
         if (asin) asins.push({ asin, label: text });
       });
     }
+
+    return asins;
+  }
+
+  /**
+   * Extract ASINs from Amazon's kat-predictive-input component.
+   * Opens the dropdown, reads all available options.
+   */
+  async function extractAsinsFromPredictiveInput(katEl, innerInput) {
+    const asins = [];
+
+    // Focus and clear the input to show all options
+    if (innerInput) {
+      innerInput.focus();
+      innerInput.click();
+      await sleep(500);
+      setNativeValue(innerInput, '');
+      await sleep(1500);
+    } else {
+      katEl.click();
+      await sleep(1500);
+    }
+
+    // Options may appear in: shadow DOM, light DOM children, or body-level popover
+    const optionSources = [
+      // Inside the kat-predictive-input's shadow root
+      ...(katEl.shadowRoot ? katEl.shadowRoot.querySelectorAll('[role="option"], [part*="option"], li, [class*="option"]') : []),
+      // As light DOM children
+      ...katEl.querySelectorAll('[role="option"], li, [class*="option"]'),
+      // In a body-level popover/dropdown
+      ...document.querySelectorAll('[role="listbox"] [role="option"], [class*="predictive"] [role="option"]'),
+      // Deep search as fallback
+      ...querySelectorAllDeep('[role="option"]')
+    ];
+
+    // De-duplicate by element reference
+    const seen = new Set();
+    for (const item of optionSources) {
+      if (seen.has(item)) continue;
+      seen.add(item);
+
+      const text = item.textContent.trim();
+      const asin = extractAsinFromText(text);
+      if (asin && !asins.find(a => a.asin === asin)) {
+        asins.push({ asin, label: text.substring(0, 100) });
+      }
+    }
+
+    // Close dropdown
+    if (innerInput) innerInput.blur();
+    document.body.click();
+    await sleep(300);
 
     return asins;
   }
@@ -471,7 +580,43 @@
       return true;
     }
 
-    // Strategy 2: Search input — type the ASIN and select it
+    // Strategy 2: kat-predictive-input (Amazon's shadow DOM component)
+    const katPredictive = document.querySelector(
+      'kat-predictive-input#asin, kat-predictive-input[data-test-id="PredictiveTextFilter"]'
+    );
+    if (katPredictive) {
+      const innerInput = getShadowInput(katPredictive);
+      if (innerInput) {
+        innerInput.focus();
+        innerInput.click();
+        await sleep(300);
+        setNativeValue(innerInput, asin);
+        await sleep(1500);
+
+        // Click the matching option from the dropdown
+        const options = [
+          ...querySelectorAllDeep('[role="option"]'),
+          ...document.querySelectorAll('[role="listbox"] [role="option"]')
+        ];
+        const seen = new Set();
+        for (const opt of options) {
+          if (seen.has(opt)) continue;
+          seen.add(opt);
+          if (opt.textContent.includes(asin)) {
+            opt.click();
+            await sleep(1000);
+            return true;
+          }
+        }
+
+        // Try pressing Enter on the inner input
+        innerInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        await sleep(1000);
+        return true;
+      }
+    }
+
+    // Strategy 3: Regular search input — type the ASIN and select it
     const searchInput = findAsinSelector();
     if (searchInput && searchInput.tagName === 'INPUT') {
       searchInput.focus();
@@ -479,7 +624,7 @@
       await sleep(1500);
 
       // Click the matching option from the dropdown
-      const options = document.querySelectorAll(
+      const options = querySelectorAllDeep(
         '[role="option"], [class*="option"], [class*="suggestion"], [class*="item"]'
       );
       for (const opt of options) {
@@ -496,7 +641,7 @@
       return true;
     }
 
-    // Strategy 3: Use the URL — navigate to the ASIN view with the ASIN param
+    // Strategy 4: Use the URL — navigate to the ASIN view with the ASIN param
     const url = new URL(window.location.href);
     url.searchParams.set('asin', asin);
     window.location.href = url.toString();
@@ -512,6 +657,19 @@
    * Find and click the "Generate Download" / "Download" button.
    */
   async function clickDownloadButton() {
+    // Priority 1: Direct lookup for Amazon's known GenerateDownloadButton (may be in shadow DOM)
+    const knownBtn = querySelectorDeep('#GenerateDownloadButton') ||
+                     querySelectorDeep('[data-test-id="GenerateDownloadButton"]') ||
+                     querySelectorDeep('kat-button[label="Generate Download"]');
+    if (knownBtn) {
+      baLog('Found Generate Download button');
+      // For kat-button, click the inner <button> in its shadow root if available
+      const innerBtn = knownBtn.shadowRoot?.querySelector('button') || knownBtn;
+      innerBtn.click();
+      await sleep(1000);
+      return true;
+    }
+
     const downloadPhrases = [
       'generate download',
       'generate report',
@@ -521,19 +679,20 @@
       'export'
     ];
 
-    // Find the download button
-    const allClickables = document.querySelectorAll(
+    // Search both light DOM and shadow DOM for clickable elements
+    const allClickables = querySelectorAllDeep(
       'button, a, kat-button, [role="button"], input[type="submit"], input[type="button"]'
     );
 
     for (const el of allClickables) {
-      if (!isVisible(el)) continue;
       const text = (el.textContent || el.value || el.getAttribute('label') || '').toLowerCase().trim();
-      const testid = (el.dataset?.testid || '').toLowerCase();
+      const testid = (el.getAttribute('data-test-id') || el.dataset?.testid || '').toLowerCase();
 
       for (const phrase of downloadPhrases) {
         if (text.includes(phrase) || testid.includes(phrase.replace(/\s/g, '-'))) {
-          el.click();
+          // For kat-button, click inner <button> in shadow root
+          const innerBtn = el.shadowRoot?.querySelector('button') || el;
+          innerBtn.click();
           await sleep(1000);
           return true;
         }
@@ -550,7 +709,7 @@
   async function handleDownloadTypeDialog() {
     await sleep(1000);
 
-    // Look for the download type selector dialog/modal
+    // Look for the download type selector dialog/modal (may be in shadow DOM)
     const dialogSelectors = [
       '[role="dialog"]', '.modal', '[class*="modal"]', '[class*="Modal"]',
       '[class*="download-type"]', '[class*="downloadType"]',
@@ -558,7 +717,7 @@
     ];
 
     for (const sel of dialogSelectors) {
-      const dialog = document.querySelector(sel);
+      const dialog = querySelectorDeep(sel);
       if (!dialog || !isVisible(dialog)) continue;
 
       // Look for download type options — prefer "Comprehensive" for full data,
