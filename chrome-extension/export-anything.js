@@ -153,6 +153,12 @@
     let sibling = table.previousElementSibling;
     let checked = 0;
     while (sibling && checked < 3) {
+      // Skip SellerData's own panels (they contain "Download" text but aren't native export buttons)
+      if (sibling.id && SELLERDATA_IDS.includes(sibling.id)) {
+        sibling = sibling.previousElementSibling;
+        checked++;
+        continue;
+      }
       const text = (sibling.textContent || '').toLowerCase();
       if (/download|export|generate report/.test(text)) return false;
       sibling = sibling.previousElementSibling;
@@ -172,10 +178,19 @@
   function getHeaders(table) {
     const headers = [];
 
-    // Standard <th> elements
-    const thCells = table.querySelectorAll('thead th, thead td, tr:first-child th');
-    if (thCells.length > 0) {
-      thCells.forEach(th => {
+    // Standard <th> elements in thead
+    const theadThCells = table.querySelectorAll('thead th, thead td');
+    if (theadThCells.length > 0) {
+      theadThCells.forEach(th => {
+        headers.push(getCleanText(th));
+      });
+      return headers;
+    }
+
+    // <th> in first row only
+    const firstRowTh = table.querySelectorAll('tr:first-child th');
+    if (firstRowTh.length > 0) {
+      firstRowTh.forEach(th => {
         headers.push(getCleanText(th));
       });
       return headers;
@@ -184,7 +199,7 @@
     // Column headers via role
     const colHeaders = table.querySelectorAll('[role="columnheader"]');
     if (colHeaders.length > 0) {
-      colHeaders.forEach(h => headers.push(getCleanText(h)));
+      colHeaders.forEach(h => headers.push(h.getAttribute('aria-label') || getCleanText(h)));
       return headers;
     }
 
@@ -195,10 +210,10 @@
       return headers;
     }
 
-    // Fallback: first row if it looks like a header
+    // Fallback: first row if it looks like a header (check tr or role="row")
     const firstRow = table.querySelector('tr, [role="row"]');
     if (firstRow) {
-      const cells = firstRow.querySelectorAll('td, th, [role="cell"], [role="columnheader"]');
+      const cells = firstRow.querySelectorAll('td, th, [role="cell"], [role="columnheader"], :scope > div, :scope > span');
       const allText = Array.from(cells).every(c => {
         const text = c.textContent.trim();
         return text.length > 0 && text.length < 80 && !/^\d+$/.test(text);
@@ -218,26 +233,41 @@
     // Standard tbody rows
     let rows = table.querySelectorAll('tbody tr');
     if (rows.length > 0) {
-      return Array.from(rows).filter(r =>
-        !r.querySelector('th') && r.textContent.trim().length > 0
-      );
+      return Array.from(rows).filter(r => {
+        // Skip pure header rows (where ALL cells are <th>), keep mixed rows
+        const cells = r.querySelectorAll('td, th');
+        const thCount = r.querySelectorAll('th').length;
+        if (cells.length > 0 && thCount === cells.length) return false;
+        return r.textContent.trim().length > 0;
+      });
     }
 
-    // All rows, skip first if it's a header
+    // All rows, skip pure header rows
     rows = table.querySelectorAll('tr');
     if (rows.length > 0) {
-      return Array.from(rows).filter(r =>
-        !r.querySelector('th') && r.textContent.trim().length > 0
-      );
+      return Array.from(rows).filter(r => {
+        if (r.closest('thead')) return false;
+        // Skip pure header rows (ALL cells are <th>)
+        const cells = r.querySelectorAll('td, th');
+        const thCount = r.querySelectorAll('th').length;
+        if (cells.length > 0 && thCount === cells.length) return false;
+        return r.textContent.trim().length > 0;
+      });
     }
 
     // Role-based rows
     rows = table.querySelectorAll('[role="row"]');
     if (rows.length > 0) {
+      // Only treat first rowgroup as header if there are multiple rowgroups
+      const allRowgroups = Array.from(table.querySelectorAll('[role="rowgroup"]'));
+      const headerRowgroup = allRowgroups.length > 1 ? allRowgroups[0] : null;
+
       return Array.from(rows).filter(r => {
-        // Skip header rows
+        // Skip rows that contain columnheaders
         if (r.querySelector('[role="columnheader"]')) return false;
-        if (r.closest('thead, [role="rowgroup"]:first-child')) return false;
+        if (r.closest('thead')) return false;
+        // Only skip first rowgroup rows if there are multiple rowgroups
+        if (headerRowgroup && r.closest('[role="rowgroup"]') === headerRowgroup) return false;
         return r.textContent.trim().length > 0;
       });
     }
@@ -253,14 +283,26 @@
   function getRowCells(row) {
     const cells = [];
 
-    // Standard td elements
-    let tdCells = row.querySelectorAll('td');
+    // Standard td/th elements
+    let tdCells = row.querySelectorAll('td, th');
     if (tdCells.length === 0) {
-      tdCells = row.querySelectorAll('[role="cell"], [role="gridcell"], kat-table-cell');
+      tdCells = row.querySelectorAll('[role="cell"], [role="gridcell"], [role="rowheader"], kat-table-cell');
     }
 
-    tdCells.forEach(cell => {
-      cells.push(getCellValue(cell));
+    // Fallback: direct child divs/spans (common in React/div-based tables)
+    if (tdCells.length === 0) {
+      tdCells = row.querySelectorAll(':scope > div, :scope > span, :scope > p');
+    }
+
+    // Last resort: any child elements with content
+    if (tdCells.length === 0) {
+      tdCells = row.children;
+    }
+
+    Array.from(tdCells).forEach(cell => {
+      if (cell.tagName !== 'SCRIPT' && cell.tagName !== 'STYLE') {
+        cells.push(getCellValue(cell));
+      }
     });
 
     return cells;

@@ -104,6 +104,14 @@
       return pickerAsins;
     }
 
+    // Strategy 5: Full page scan — search all DOM text/attributes for ASINs
+    baLog('Trying full page scan for ASINs...');
+    const pageAsins = extractAsinsFromFullPage();
+    if (pageAsins.length > 0) {
+      baLog(`Found ${pageAsins.length} ASINs from page content`);
+      return pageAsins;
+    }
+
     return [];
   }
 
@@ -114,16 +122,29 @@
     const selectors = [
       'select[data-testid*="asin"], select[name*="asin"], select[id*="asin"]',
       '[data-testid*="asin-select"], [data-testid*="asin-picker"], [data-testid*="asin-dropdown"]',
+      '[data-testid*="product-select"], [data-testid*="product-picker"], [data-testid*="catalog"]',
       '[class*="asin-select"], [class*="asinSelect"], [class*="AsinSelect"]',
       '[class*="asin-picker"], [class*="asinPicker"], [class*="AsinPicker"]',
       'kat-dropdown[data-testid*="asin"], kat-select[data-testid*="asin"]',
+      // Amazon custom elements (broader matches)
+      'kat-combobox[data-testid*="asin"], kat-combobox[data-testid*="product"]',
+      'kat-dropdown[data-testid*="product"], kat-select[data-testid*="product"]',
+      // Data-cy attributes (React testing)
+      '[data-cy*="asin" i], [data-cy*="product-select" i]',
       // Amazon often uses a combobox pattern for ASIN search
       '[role="combobox"][aria-label*="ASIN" i]',
       '[role="combobox"][aria-label*="product" i]',
+      '[role="combobox"][aria-label*="catalog" i]',
       'input[placeholder*="ASIN" i]',
       'input[placeholder*="Search your" i]',
+      'input[placeholder*="Search ASIN" i]',
+      'input[placeholder*="Search product" i]',
+      'input[placeholder*="Enter ASIN" i]',
       'input[aria-label*="ASIN" i]',
-      'input[aria-label*="product" i]'
+      'input[aria-label*="product" i]',
+      'input[aria-label*="catalog" i]',
+      // Broader search input patterns near ASIN-related labels
+      'input[type="search"]'
     ];
 
     for (const sel of selectors) {
@@ -259,17 +280,88 @@
    */
   function extractAsinsFromTable() {
     const asins = [];
-    const rows = document.querySelectorAll('table tbody tr, [role="row"]');
+
+    // Check standard table rows and role-based rows
+    const rows = document.querySelectorAll('table tbody tr, [role="row"], [role="gridcell"]');
     rows.forEach(row => {
       const text = row.textContent || '';
       const match = text.match(/\b(B[A-Z0-9]{9})\b/);
       if (match && !asins.find(a => a.asin === match[1])) {
-        // Try to get a product name too
         const nameEl = row.querySelector('a, [class*="product"], [class*="title"]');
         const label = nameEl ? nameEl.textContent.trim().substring(0, 80) : match[1];
         asins.push({ asin: match[1], label });
       }
     });
+    if (asins.length > 0) return asins;
+
+    // Check elements with data-asin attributes
+    document.querySelectorAll('[data-asin], [data-product-asin]').forEach(el => {
+      const asin = el.getAttribute('data-asin') || el.getAttribute('data-product-asin');
+      if (asin && /^B[A-Z0-9]{9}$/.test(asin) && !asins.find(a => a.asin === asin)) {
+        const label = (el.textContent || '').trim().substring(0, 80) || asin;
+        asins.push({ asin, label });
+      }
+    });
+    if (asins.length > 0) return asins;
+
+    // Check links for ASIN patterns in href
+    document.querySelectorAll('a[href*="/dp/"], a[href*="asin="], a[href*="/product/"]').forEach(link => {
+      const href = link.href || '';
+      const match = href.match(/\/dp\/(B[A-Z0-9]{9})/) ||
+                    href.match(/asin=(B[A-Z0-9]{9})/) ||
+                    href.match(/\/product\/(B[A-Z0-9]{9})/);
+      if (match && !asins.find(a => a.asin === match[1])) {
+        asins.push({ asin: match[1], label: (link.textContent || '').trim().substring(0, 80) || match[1] });
+      }
+    });
+    if (asins.length > 0) return asins;
+
+    // Scan div-based grid/list structures
+    document.querySelectorAll('[class*="row"], [class*="Row"], [class*="item"], [class*="Item"], [class*="product"], [class*="Product"]').forEach(el => {
+      const text = el.textContent || '';
+      const match = text.match(/\b(B[A-Z0-9]{9})\b/);
+      if (match && !asins.find(a => a.asin === match[1])) {
+        asins.push({ asin: match[1], label: match[1] });
+      }
+    });
+
+    return asins;
+  }
+
+  /**
+   * Full page text scan for ASINs — last resort strategy.
+   */
+  function extractAsinsFromFullPage() {
+    const asins = [];
+
+    // First try data attributes (most reliable)
+    document.querySelectorAll('[data-asin], [data-product-asin]').forEach(el => {
+      const asin = el.getAttribute('data-asin') || el.getAttribute('data-product-asin');
+      if (asin && /^B[A-Z0-9]{9}$/.test(asin) && !asins.find(a => a.asin === asin)) {
+        const label = (el.textContent || '').trim().substring(0, 80) || asin;
+        asins.push({ asin, label });
+      }
+    });
+    if (asins.length > 0) return asins;
+
+    // Then try links
+    document.querySelectorAll('a').forEach(link => {
+      const href = link.href || '';
+      const match = href.match(/\/dp\/(B[A-Z0-9]{9})/) ||
+                    href.match(/asin=(B[A-Z0-9]{9})/) ||
+                    href.match(/\/product\/(B[A-Z0-9]{9})/);
+      if (match && !asins.find(a => a.asin === match[1])) {
+        asins.push({ asin: match[1], label: (link.textContent || '').trim().substring(0, 80) || match[1] });
+      }
+    });
+    if (asins.length > 0) return asins;
+
+    // Full text scan as last resort
+    const bodyText = document.body.innerText || '';
+    const matches = [...new Set(bodyText.match(/\bB[A-Z0-9]{9}\b/g) || [])];
+    for (const asin of matches) {
+      asins.push({ asin, label: asin });
+    }
     return asins;
   }
 
@@ -282,10 +374,14 @@
     // Find the ASIN picker trigger button
     const triggerSelectors = [
       'button[data-testid*="asin"], button[aria-label*="ASIN" i]',
+      'button[data-testid*="product"], button[aria-label*="product" i]',
       '[class*="asin"] button, [class*="Asin"] button',
-      'kat-dropdown-button[data-testid*="asin"]',
+      '[class*="product-select"] button, [class*="productSelect"] button',
+      'kat-dropdown-button[data-testid*="asin"], kat-dropdown-button[data-testid*="product"]',
+      'kat-combobox[data-testid*="asin"], kat-combobox[data-testid*="product"]',
       // Look for any button near an "ASIN" label
-      'label[for*="asin"] + button, label[for*="asin"] ~ button'
+      'label[for*="asin"] + button, label[for*="asin"] ~ button',
+      'label[for*="product"] + button, label[for*="product"] ~ button'
     ];
 
     // Also find by text content
@@ -300,7 +396,9 @@
     if (!triggerBtn) {
       for (const btn of allBtns) {
         const text = (btn.textContent || btn.getAttribute('label') || '').toLowerCase();
-        if (text.includes('asin') || text.includes('select product') || text.includes('choose asin')) {
+        if (text.includes('asin') || text.includes('select product') || text.includes('choose asin') ||
+            text.includes('select asin') || text.includes('pick product') || text.includes('your products') ||
+            text.includes('catalog')) {
           triggerBtn = btn;
           break;
         }
@@ -535,7 +633,7 @@
     const asins = await discoverAllAsins();
 
     if (asins.length === 0) {
-      baLog('No ASINs found. Make sure you are on the ASIN view and your catalog has products.', 'error');
+      baLog('No ASINs found. Make sure you are on the ASIN view (not Query view) and that your catalog has products listed.', 'error');
       isRunning = false;
       updateButtonState('idle');
       return;
