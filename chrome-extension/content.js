@@ -22,8 +22,54 @@
       if (!id || seen.has(id)) return;
       // Skip non-project path segments
       if (['new', 'create', 'edit', 'settings', 'delete'].includes(id)) return;
+      // Skip pure numeric values that look like pagination (10, 25, 50, 100, 250, 500)
+      if (/^\d+$/.test(id) && [10, 25, 50, 100, 250, 500].includes(Number(id))) return;
       seen.add(id);
       projects.push({ id, name: name || `Project ${id}` });
+    }
+
+    /**
+     * Extract the project name from a link element by checking the link text,
+     * then walking up to find a meaningful name from parent row/card elements.
+     */
+    function extractProjectName(linkEl) {
+      // First try the link's own text
+      const linkText = linkEl.textContent?.trim().split('\n')[0]?.trim() || '';
+      // If the link text is meaningful (not just the ID or empty), use it
+      if (linkText && !/^\d+$/.test(linkText) && linkText.length > 2) {
+        return linkText;
+      }
+
+      // Walk up to find a parent row, card, or list-item
+      let parent = linkEl.parentElement;
+      for (let i = 0; i < 6 && parent; i++) {
+        const tag = parent.tagName?.toLowerCase();
+        const cls = parent.className || '';
+
+        // Check if this is a row, card, or list item container
+        if (tag === 'tr' || tag === 'li' ||
+            /row|card|item|project/i.test(cls) ||
+            parent.getAttribute('role') === 'row') {
+          // Look for a name/title element inside
+          const nameEl = parent.querySelector(
+            '[class*="name"], [class*="title"], [class*="label"], ' +
+            'h1, h2, h3, h4, h5, td:first-child, span:first-child'
+          );
+          const nameText = nameEl?.textContent?.trim().split('\n')[0]?.trim() || '';
+          if (nameText && nameText.length > 2) {
+            return nameText;
+          }
+          // Fall back to first cell or first meaningful text
+          const firstCell = parent.querySelector('td, [class*="cell"]');
+          if (firstCell) {
+            const cellText = firstCell.textContent?.trim().split('\n')[0]?.trim() || '';
+            if (cellText && cellText.length > 2) return cellText;
+          }
+        }
+        parent = parent.parentElement;
+      }
+
+      return linkText;
     }
 
     // Strategy 1: Find <a> links pointing to project pages
@@ -34,7 +80,7 @@
       // Match /projects/<id> or /project/<id>
       let match = href.match(/\/projects?\/([a-zA-Z0-9_-]+)/);
       if (match) {
-        const name = a.textContent?.trim().split('\n')[0]?.trim() || '';
+        const name = extractProjectName(a);
         addProject(match[1], name);
         return;
       }
@@ -42,7 +88,7 @@
       // Match ?project=<id> or &project_id=<id>
       match = href.match(/[?&]project[_-]?(?:id)?=([a-zA-Z0-9_-]+)/);
       if (match) {
-        const name = a.textContent?.trim().split('\n')[0]?.trim() || '';
+        const name = extractProjectName(a);
         addProject(match[1], name);
       }
     });
@@ -59,14 +105,13 @@
 
     // Strategy 3: Scan table rows on project-related pages
     if (window.location.pathname.includes('project') || window.location.href.includes('project')) {
-      document.querySelectorAll('table tbody tr, [role="row"], [class*="row"]').forEach((row) => {
+      document.querySelectorAll('table tbody tr, [role="row"]').forEach((row) => {
         const link = row.querySelector('a[href]');
         if (link) {
           const href = link.href || '';
           const match = href.match(/\/projects?\/([a-zA-Z0-9_-]+)/);
           if (match) {
-            const name = link.textContent?.trim() ||
-              row.querySelector('td:first-child, [class*="name"]')?.textContent?.trim() || '';
+            const name = extractProjectName(link);
             addProject(match[1], name);
           }
         }
@@ -74,29 +119,30 @@
 
       // Also look for card/grid/list layouts
       document.querySelectorAll(
-        '[class*="project"], [class*="card"], [class*="list-item"], [class*="item"]'
+        '[class*="project"], [class*="card"], [class*="list-item"]'
       ).forEach((el) => {
         const link = el.querySelector('a[href]');
         if (link) {
           const href = link.href || '';
           const match = href.match(/\/projects?\/([a-zA-Z0-9_-]+)/);
           if (match) {
-            const name = link.textContent?.trim() ||
-              el.querySelector('h2, h3, h4, [class*="name"], [class*="title"]')?.textContent?.trim() || '';
+            const name = el.querySelector(
+              'h2, h3, h4, [class*="name"], [class*="title"]'
+            )?.textContent?.trim() || extractProjectName(link);
             addProject(match[1], name);
           }
         }
       });
     }
 
-    // Strategy 4: Look for project selector dropdowns
+    // Strategy 4: Look for project-specific selector dropdowns
     document.querySelectorAll(
-      'select[name*="project"], #project-select, .project-selector select, select'
+      'select[name*="project"], select[id*="project"], ' +
+      '#project-select, .project-selector select, [class*="project"] select'
     ).forEach((select) => {
       Array.from(select.options).forEach((option) => {
         if (option.value && option.value !== '' && option.value !== 'all') {
           const text = option.textContent?.trim() || '';
-          // Only add if option looks like a project (has meaningful text)
           if (text && text.length > 1) {
             addProject(option.value, text);
           }
@@ -210,11 +256,13 @@
       'trends': '/trends',
     };
 
-    let url = `https://datarova.com${toolPaths[reportType] || '/keyword-spy'}`;
+    // Use the current origin (app.datarova.com) instead of hardcoding
+    const origin = window.location.origin;
+    let url = `${origin}${toolPaths[reportType] || '/keyword-spy'}`;
     const queryParams = [];
 
-    if (marketplace) queryParams.push(`marketplace=${marketplace}`);
-    if (projectId) queryParams.push(`project=${projectId}`);
+    if (marketplace) queryParams.push(`marketplace=${encodeURIComponent(marketplace)}`);
+    if (projectId) queryParams.push(`project=${encodeURIComponent(projectId)}`);
 
     if (queryParams.length > 0) {
       url += `?${queryParams.join('&')}`;
