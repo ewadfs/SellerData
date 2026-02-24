@@ -393,83 +393,108 @@
     return false;
   }
 
+  /**
+   * Check if the row's "Request Sent" date is today.
+   * Datarova format: "Tue, Feb 24, 2026 2:51 PM"
+   *
+   * We find the column index from the <thead>, then parse only that cell
+   * to avoid false positives from the "Date Range" column which also
+   * contains date strings.
+   */
   function isRowFromToday(row) {
     var today = new Date();
     var cells = row.querySelectorAll('td');
+    var requestSentIdx = findRequestSentColumnIndex(row);
+    var cellsToCheck = [];
 
-    // Strategy 1: Try to parse a date from each cell and check if it's today
-    for (var c = 0; c < cells.length; c++) {
-      var cellText = (cells[c].textContent || '').trim();
-      if (!cellText || cellText.length < 4 || cellText.length > 60) continue;
+    if (requestSentIdx !== -1 && requestSentIdx < cells.length) {
+      // Only check the specific "Request Sent" column
+      cellsToCheck.push(cells[requestSentIdx]);
+    } else {
+      // Fallback: check all cells (skip first cell if it's a checkbox)
+      for (var c = 0; c < cells.length; c++) cellsToCheck.push(cells[c]);
+    }
 
-      // Check for relative time indicators (always means today)
+    for (var i = 0; i < cellsToCheck.length; i++) {
+      var cellText = (cellsToCheck[i].textContent || '').trim();
+      if (!cellText || cellText.length < 4) continue;
+
+      // Check for relative time (always today)
       var cellLower = cellText.toLowerCase();
       if (cellLower === 'today' ||
           cellLower.includes('just now') ||
           cellLower.includes('seconds ago') ||
-          cellLower.includes('minute ago') || cellLower.includes('minutes ago') ||
-          cellLower.includes('hour ago') || cellLower.includes('hours ago') ||
-          cellLower.includes('a moment ago')) {
-        console.log('[Datarova Bulk]   isRowFromToday: matched relative time in cell[' + c + ']:', cellText);
+          cellLower.includes('minutes ago') || cellLower.includes('minute ago') ||
+          cellLower.includes('hours ago') || cellLower.includes('hour ago')) {
         return true;
       }
 
-      // Try JS Date.parse on the cell text (handles many formats natively)
-      var parsed = new Date(cellText);
+      // Strip leading day-of-week if present: "Tue, Feb 24..." → "Feb 24..."
+      var cleaned = cellText.replace(/^[A-Za-z]{3},\s*/, '');
+
+      // Try Date.parse (Chrome handles "Feb 24, 2026 2:51 PM" natively)
+      var parsed = new Date(cleaned);
       if (!isNaN(parsed.getTime())) {
-        var sameDay = parsed.getFullYear() === today.getFullYear() &&
-                      parsed.getMonth() === today.getMonth() &&
-                      parsed.getDate() === today.getDate();
-        if (sameDay) {
-          console.log('[Datarova Bulk]   isRowFromToday: parsed date match in cell[' + c + ']:', cellText);
+        if (parsed.getFullYear() === today.getFullYear() &&
+            parsed.getMonth() === today.getMonth() &&
+            parsed.getDate() === today.getDate()) {
+          return true;
+        }
+        // This cell parsed to a valid date but NOT today → skip it
+        continue;
+      }
+
+      // Also try the original text without stripping
+      parsed = new Date(cellText);
+      if (!isNaN(parsed.getTime())) {
+        if (parsed.getFullYear() === today.getFullYear() &&
+            parsed.getMonth() === today.getMonth() &&
+            parsed.getDate() === today.getDate()) {
           return true;
         }
       }
     }
 
-    // Strategy 2: String pattern matching on full row text
-    var rowText = (row.textContent || '');
-    var rowLower = rowText.toLowerCase();
-    var months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
-    var monthsFull = ['january','february','march','april','may','june','july','august','september','october','november','december'];
-    var m = today.getMonth();
-    var d = today.getDate();
-    var y = today.getFullYear();
-
-    var datePatterns = [
-      months[m] + ' ' + d + ', ' + y,            // "feb 24, 2026"
-      months[m] + ' ' + d + ' ' + y,             // "feb 24 2026"
-      monthsFull[m] + ' ' + d + ', ' + y,        // "february 24, 2026"
-      monthsFull[m] + ' ' + d + ' ' + y,         // "february 24 2026"
-      d + ' ' + months[m] + ' ' + y,             // "24 feb 2026"
-      d + ' ' + months[m] + ', ' + y,            // "24 feb, 2026"
-      d + ' ' + monthsFull[m] + ' ' + y,         // "24 february 2026"
-      (m + 1) + '/' + d + '/' + y,               // "2/24/2026"
-      pad(m + 1) + '/' + pad(d) + '/' + y,       // "02/24/2026"
-      d + '/' + pad(m + 1) + '/' + y,            // "24/02/2026"
-      pad(d) + '/' + pad(m + 1) + '/' + y,       // "24/02/2026"
-      y + '-' + pad(m + 1) + '-' + pad(d),       // "2026-02-24"
-      months[m] + ' ' + pad(d) + ', ' + y,       // "feb 04, 2026" (padded day)
-      pad(d) + ' ' + months[m] + ' ' + y,        // "04 feb 2026"
-    ];
-
-    for (var i = 0; i < datePatterns.length; i++) {
-      if (rowLower.includes(datePatterns[i])) {
-        console.log('[Datarova Bulk]   isRowFromToday: pattern match "' + datePatterns[i] + '" in row');
-        return true;
-      }
-    }
-
-    // Log all cell texts so user can report the actual date format
-    var cellTexts = [];
-    for (var j = 0; j < cells.length; j++) {
-      cellTexts.push('cell[' + j + ']="' + (cells[j].textContent || '').trim().substring(0, 60) + '"');
-    }
-    console.log('[Datarova Bulk]   isRowFromToday: NO MATCH. Cells:', cellTexts.join(' | '));
+    console.log('[Datarova Bulk]   isRowFromToday: NO MATCH. reqSentIdx=' + requestSentIdx +
+      ' cellText=' + (requestSentIdx >= 0 && requestSentIdx < cells.length
+        ? '"' + (cells[requestSentIdx].textContent || '').trim() + '"'
+        : '(not found)'));
     return false;
   }
 
-  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  /** Find the column index of "Request Sent" from the table header row. Cached per table. */
+  var _requestSentColCache = { tableId: null, idx: -1 };
+  function findRequestSentColumnIndex(row) {
+    var table = row.closest('table');
+    if (!table) return -1;
+
+    // Return cached result if same table
+    var tableId = table.id || table.className;
+    if (_requestSentColCache.tableId === tableId) return _requestSentColCache.idx;
+
+    var headers = table.querySelectorAll('thead th, thead td');
+    for (var i = 0; i < headers.length; i++) {
+      var text = (headers[i].textContent || '').trim().toLowerCase();
+      if (text.includes('request') && text.includes('sent')) {
+        _requestSentColCache = { tableId: tableId, idx: i };
+        console.log('[Datarova Bulk] Found "Request Sent" column at index', i);
+        return i;
+      }
+    }
+
+    // Fallback: look for any header containing "sent" or "requested"
+    for (var j = 0; j < headers.length; j++) {
+      var t = (headers[j].textContent || '').trim().toLowerCase();
+      if (t.includes('sent') || t.includes('requested') || t === 'date') {
+        _requestSentColCache = { tableId: tableId, idx: j };
+        console.log('[Datarova Bulk] Found date column at index', j, '("' + t + '")');
+        return j;
+      }
+    }
+
+    _requestSentColCache = { tableId: tableId, idx: -1 };
+    return -1;
+  }
 
   function simulateClick(el) {
     // Use both native click and MouseEvent for maximum compatibility with React/MUI
