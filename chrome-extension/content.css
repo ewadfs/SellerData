@@ -1,0 +1,53 @@
+/* Datarova Bulk Downloader - Content Script Styles */
+
+/* Overlay shown during bulk download operations */
+.datarova-bulk-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+}
+
+.datarova-bulk-status {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px 32px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  max-width: 360px;
+}
+
+.datarova-bulk-status h3 {
+  font-size: 16px;
+  color: #4361ee;
+  margin-bottom: 8px;
+}
+
+.datarova-bulk-status p {
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 12px;
+}
+
+.datarova-bulk-progress {
+  width: 100%;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.datarova-bulk-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #4361ee, #7c3aed);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}

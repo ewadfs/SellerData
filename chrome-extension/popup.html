@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Datarova Bulk Downloader</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Datarova Bulk Reports</h1>
+      <p class="subtitle">Download reports across projects &amp; marketplaces</p>
+    </header>
+
+    <div id="not-on-datarova" class="notice hidden">
+      <p>Please navigate to <strong>datarova.com</strong> to use this extension.</p>
+    </div>
+
+    <div id="main-controls">
+      <!-- Report Type -->
+      <section class="control-group">
+        <label for="report-type">Report Type</label>
+        <select id="report-type">
+          <option value="keyword-spy">Keyword Spy</option>
+          <option value="asin-insights">ASIN Insights</option>
+          <option value="keyword-monitor">Keyword Monitor</option>
+          <option value="keyword-tracker">Keyword Tracker</option>
+          <option value="competitor-tracking">Competitor Tracking</option>
+          <option value="trends">Trends</option>
+        </select>
+      </section>
+
+      <!-- Marketplace / Country Selection -->
+      <section class="control-group">
+        <label>Marketplaces</label>
+        <div class="checkbox-grid" id="marketplace-list">
+          <label class="checkbox-item">
+            <input type="checkbox" value="US" checked> <span class="flag">🇺🇸</span> USA
+          </label>
+          <label class="checkbox-item">
+            <input type="checkbox" value="CA"> <span class="flag">🇨🇦</span> Canada
+          </label>
+          <label class="checkbox-item">
+            <input type="checkbox" value="MX"> <span class="flag">🇲🇽</span> Mexico
+          </label>
+          <label class="checkbox-item">
+            <input type="checkbox" value="UK"> <span class="flag">🇬🇧</span> UK
+          </label>
+          <label class="checkbox-item">
+            <input type="checkbox" value="DE"> <span class="flag">🇩🇪</span> Germany
+          </label>
+          <label class="checkbox-item">
+            <input type="checkbox" value="FR"> <span class="flag">🇫🇷</span> France
+          </label>
+          <label class="checkbox-item">
+            <input type="checkbox" value="IT"> <span class="flag">🇮🇹</span> Italy
+          </label>
+          <label class="checkbox-item">
+            <input type="checkbox" value="ES"> <span class="flag">🇪🇸</span> Spain
+          </label>
+        </div>
+        <div class="select-actions">
+          <button id="select-all-markets" class="link-btn">Select All</button>
+          <button id="deselect-all-markets" class="link-btn">Deselect All</button>
+        </div>
+      </section>
+
+      <!-- Project Selection -->
+      <section class="control-group">
+        <label>Projects</label>
+        <div id="projects-loading" class="loading-text">Detecting projects...</div>
+        <div id="projects-list" class="checkbox-grid hidden"></div>
+        <div id="no-projects" class="notice hidden">
+          <p>No projects detected. Make sure you are logged in to Datarova.</p>
+        </div>
+        <div class="select-actions">
+          <button id="select-all-projects" class="link-btn">Select All</button>
+          <button id="deselect-all-projects" class="link-btn">Deselect All</button>
+        </div>
+      </section>
+
+      <!-- Date Range -->
+      <section class="control-group">
+        <label for="date-range">Date Range</label>
+        <select id="date-range">
+          <option value="last-30">Last 30 Days</option>
+          <option value="last-90">Last 90 Days</option>
+          <option value="last-180">Last 6 Months</option>
+          <option value="last-365">Last 12 Months</option>
+          <option value="custom">Custom Range</option>
+        </select>
+        <div id="custom-dates" class="hidden">
+          <input type="date" id="date-start" />
+          <input type="date" id="date-end" />
+        </div>
+      </section>
+
+      <!-- Download Format -->
+      <section class="control-group">
+        <label for="download-format">Download Format</label>
+        <select id="download-format">
+          <option value="csv">CSV</option>
+          <option value="xlsx">Excel (XLSX)</option>
+        </select>
+      </section>
+
+      <!-- Actions -->
+      <section class="actions">
+        <button id="btn-download" class="btn-primary">
+          <span id="btn-text">Download Reports</span>
+          <span id="btn-spinner" class="spinner hidden"></span>
+        </button>
+        <button id="btn-cancel" class="btn-secondary hidden">Cancel</button>
+      </section>
+
+      <!-- Progress -->
+      <section id="progress-section" class="hidden">
+        <div class="progress-bar-container">
+          <div id="progress-bar" class="progress-bar" style="width: 0%"></div>
+        </div>
+        <p id="progress-text" class="progress-text">Preparing...</p>
+        <div id="download-log" class="download-log"></div>
+      </section>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
