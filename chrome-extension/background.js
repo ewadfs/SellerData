@@ -295,31 +295,27 @@ async function sendMessageToTab(tabId, message) {
 
 function reportPhase(phase, completed, total) {
   console.log('[Datarova BG] Phase:', phase, '(' + completed + '/' + total + ')');
-  try {
-    chrome.runtime.sendMessage({
-      action: 'phaseChange',
-      phase,
-      completed,
-      total,
-    });
-  } catch (e) { /* popup may be closed */ }
+  chrome.runtime.sendMessage({
+    action: 'phaseChange',
+    phase,
+    completed,
+    total,
+  }).catch(() => {}); // popup may be closed
 }
 
 function reportProgress(phase, projectName, success, error, completed, total) {
   console.log('[Datarova BG] Progress:', phase, '-', projectName,
     success ? '(ok)' : '(FAIL: ' + error + ')',
     completed + '/' + total);
-  try {
-    chrome.runtime.sendMessage({
-      action: 'exportProgress',
-      phase,
-      projectName,
-      success,
-      error,
-      completed,
-      total,
-    });
-  } catch (e) { /* popup may be closed */ }
+  chrome.runtime.sendMessage({
+    action: 'exportProgress',
+    phase,
+    projectName,
+    success,
+    error,
+    completed,
+    total,
+  }).catch(() => {}); // popup may be closed
 }
 
 function sleep(ms) {
