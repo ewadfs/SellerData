@@ -10,11 +10,9 @@
 (function () {
   'use strict';
 
-  // Guard against double-injection (manifest + scripting.executeScript)
-  if (window.__datarova_bulk_loaded) return;
-  window.__datarova_bulk_loaded = true;
-
-  console.log('[Datarova Bulk] content script loaded v3');
+  // No guard — allows re-injection after extension reload.
+  // Duplicate listeners are harmless (Chrome only honours the first sendResponse).
+  console.log('[Datarova Bulk] content script loaded v4, url:', location.href);
 
   // ── Project Detection (runs on /projects page) ───────────────────────────
 
@@ -22,11 +20,17 @@
     var projects = [];
     var seen = new Set();
 
-    document.querySelectorAll('a[href*="/projects/"]').forEach(function (a) {
+    var allLinks = document.querySelectorAll('a[href*="/projects/"]');
+    console.log('[Datarova Bulk] found', allLinks.length, 'project links');
+
+    allLinks.forEach(function (a) {
       try {
-        var href = a.href || '';
+        var href = a.href || a.getAttribute('href') || '';
         var match = href.match(/\/projects\/(\d+)(?:\/\w+\/([A-Z0-9]{10}))?/);
-        if (!match) return;
+        if (!match) {
+          console.log('[Datarova Bulk]   skip link (no match):', href);
+          return;
+        }
 
         var projectId = match[1];
         if (seen.has(projectId)) return;
@@ -34,6 +38,11 @@
 
         var asin = match[2] || extractAsinFromText(a);
         var card = findCardContainer(a);
+
+        console.log('[Datarova Bulk]   project', projectId,
+          'card id:', card ? card.id : '(none)',
+          'card tag:', card ? card.tagName : '(none)');
+
         var name = extractNameFromCard(card, asin);
 
         var marketplace = 'US';
@@ -54,7 +63,7 @@
       }
     });
 
-    console.log('[Datarova Bulk] detected', projects.length, 'projects:', projects);
+    console.log('[Datarova Bulk] detected', projects.length, 'projects:', JSON.stringify(projects));
     return projects;
   }
 
@@ -152,8 +161,6 @@
   //   "card-cad-bamboo-cutting-board"  → "cad" = Canada
   //   "card-utensil-holder-uk"         → "uk"  = UK
   //   "card-popcorn-maker"             → no code = US (default)
-  //   "card-butter-dish-uk"            → "uk"  = UK
-  //   "card-cad-rotating-utensil-holder" → "cad" = Canada
 
   // 3-letter codes: safe to match anywhere in the slug
   var SLUG_CODES_3 = {
@@ -179,8 +186,7 @@
       if (result) return result;
     }
 
-    // Strategy 2: Walk up to find a parent with card- ID (if findCardContainer
-    // returned a child element)
+    // Strategy 2: Walk up to find a parent with card- ID
     var parent = card.parentElement;
     for (var i = 0; i < 5 && parent; i++) {
       if (parent.id && parent.id.indexOf('card-') === 0) {
@@ -199,7 +205,6 @@
   }
 
   function parseMarketplaceFromCardId(cardId) {
-    // "card-cad-bamboo-cutting-board" → parts: ["cad","bamboo","cutting","board"]
     var parts = cardId.toLowerCase().split('-');
     if (parts[0] !== 'card' || parts.length < 2) return null;
     parts = parts.slice(1); // remove "card" prefix
@@ -220,7 +225,7 @@
       if (SLUG_CODES_3[parts[i]]) return SLUG_CODES_3[parts[i]];
     }
 
-    return null; // No marketplace code found → caller defaults to US
+    return null;
   }
 
   // ── Export Triggering (runs on /projects/<id>/ranks/<asin> page) ──────────
@@ -286,7 +291,6 @@
       throw new Error('No report rows found');
     }
 
-    // Take top N rows (most recent), reverse to download oldest first
     var targetRows = Array.from(rows).slice(0, count || rows.length);
     targetRows.reverse();
 
@@ -332,7 +336,6 @@
 
     var lastCell = cells[cells.length - 1];
 
-    // Method 1: aria-label / title check
     var allBtns = lastCell.querySelectorAll(
       'button, [role="button"], .MuiIconButton-root, a'
     );
@@ -346,12 +349,10 @@
       }
     }
 
-    // Method 2: First button in actions cell = download
     if (allBtns.length >= 1) {
       return allBtns[0];
     }
 
-    // Method 3: Check second-to-last cell
     if (cells.length >= 2) {
       var secondLast = cells[cells.length - 2];
       var btns2 = secondLast.querySelectorAll(
@@ -409,6 +410,8 @@
   // ── Message Handling ────────────────────────────────────────────────────
 
   chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
+    console.log('[Datarova Bulk] received message:', message.action);
+
     if (message.action === 'getProjects') {
       try {
         var projects = detectProjects();

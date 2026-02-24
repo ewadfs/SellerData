@@ -86,17 +86,22 @@ async function detectProjects(tabId) {
 
   for (var attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      if (attempt === 1) {
+      // Always try to inject the content script (it handles duplicates gracefully)
+      if (attempt > 0) {
         try {
           await chrome.scripting.executeScript({
             target: { tabId: tabId },
             files: ['content.js'],
           });
           await new Promise(function (r) { setTimeout(r, 500); });
-        } catch (e) { /* may already be loaded */ }
+        } catch (e) {
+          console.warn('Script injection attempt ' + (attempt + 1) + ':', e.message);
+        }
       }
 
       var response = await chrome.tabs.sendMessage(tabId, { action: 'getProjects' });
+      console.log('Detection attempt ' + (attempt + 1) + ' response:', response);
+
       if (response && response.projects && response.projects.length > 0) {
         allProjects = response.projects;
         populateMarketplaceFilter();
@@ -109,8 +114,20 @@ async function detectProjects(tabId) {
         await new Promise(function (r) { setTimeout(r, RETRY_DELAY_MS); });
       }
     } catch (err) {
-      console.warn('Detection attempt ' + (attempt + 1) + ' failed:', err);
-      if (attempt < MAX_RETRIES - 1) {
+      console.warn('Detection attempt ' + (attempt + 1) + ' failed:', err.message);
+
+      // On first failure, immediately inject and retry without waiting
+      if (attempt === 0) {
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: tabId },
+            files: ['content.js'],
+          });
+          await new Promise(function (r) { setTimeout(r, 800); });
+        } catch (e) {
+          console.warn('Script injection failed:', e.message);
+        }
+      } else if (attempt < MAX_RETRIES - 1) {
         await new Promise(function (r) { setTimeout(r, RETRY_DELAY_MS); });
       }
     }
