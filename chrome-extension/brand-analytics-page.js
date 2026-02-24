@@ -108,75 +108,73 @@
   // ============================================================
 
   /**
-   * The Brand Analytics Query Performance page defaults to "Brand View".
-   * We need to switch to "ASIN View" so the ASIN selector appears.
-   * The toggle is typically a kat-tab-header or a set of tab buttons.
+   * The Brand Analytics Query Performance page has two views:
+   * "Brand View" (default) and "ASIN View".  We need ASIN View so
+   * the per-ASIN selector appears.
+   *
+   * IMPORTANT: We do NOT use findAsinSelector() to detect the current
+   * view — that function matches generic inputs that exist on both views.
+   * Instead we check the URL and active-tab state directly.
    */
   async function ensureAsinView() {
-    // Check if already on ASIN view — look for the ASIN selector being present
-    const existingSelector = findAsinSelector();
-    if (existingSelector) {
-      baLog('Already on ASIN view');
+    // Check 1: URL already has viewType=ASIN — we're on ASIN view
+    const currentUrl = new URL(window.location.href);
+    if ((currentUrl.searchParams.get('viewType') || '').toUpperCase() === 'ASIN') {
+      baLog('Already on ASIN view (URL)');
       return true;
+    }
+
+    // Check 2: Look for an active/selected tab that says "ASIN"
+    const allTabs = querySelectorAllDeep(
+      'kat-tab-header, [role="tab"], kat-tab'
+    );
+    for (const tab of allTabs) {
+      const text = (tab.textContent || tab.getAttribute('label') || '').toLowerCase();
+      const isActive = tab.getAttribute('selected') !== null ||
+                       tab.getAttribute('active') !== null ||
+                       tab.classList?.contains('active') ||
+                       tab.classList?.contains('selected') ||
+                       tab.getAttribute('aria-selected') === 'true';
+      if (text.includes('asin') && isActive) {
+        baLog('Already on ASIN view (active tab)');
+        return true;
+      }
     }
 
     baLog('Switching to ASIN view...');
 
     // Strategy 1: kat-tab-header tabs — click the one containing "ASIN"
-    const katTabs = querySelectorAllDeep('kat-tab-header, [role="tab"]');
-    for (const tab of katTabs) {
+    for (const tab of allTabs) {
       const text = (tab.textContent || tab.getAttribute('label') || '').toLowerCase();
       if (text.includes('asin')) {
         const inner = tab.shadowRoot?.querySelector('button, [role="tab"]') || tab;
         inner.click();
-        baLog('  Clicked ASIN View tab (kat-tab-header)');
-        await sleep(3000);
+        baLog('  Clicked ASIN View tab');
+        await sleep(4000);
         return true;
       }
     }
 
-    // Strategy 2: Regular buttons/links/tabs with text "ASIN View" or "ASIN"
+    // Strategy 2: Regular buttons/links with text "ASIN View" or "ASIN"
     const allClickables = querySelectorAllDeep(
-      'button, a, [role="tab"], [role="button"], kat-button, kat-link, kat-tab'
+      'button, a, [role="button"], kat-button, kat-link'
     );
     for (const el of allClickables) {
       const text = (el.textContent || el.getAttribute('label') || '').trim().toLowerCase();
       if ((text.includes('asin view') || text === 'asin') && isVisible(el)) {
         const inner = el.shadowRoot?.querySelector('button, a') || el;
         inner.click();
-        baLog('  Clicked ASIN View tab');
-        await sleep(3000);
+        baLog('  Clicked ASIN View button');
+        await sleep(4000);
         return true;
       }
     }
 
-    // Strategy 3: Look for a toggle/radio group with "ASIN" option
-    const radios = querySelectorAllDeep(
-      'kat-radio-button, kat-radiobutton, input[type="radio"], [role="radio"]'
-    );
-    for (const r of radios) {
-      const text = (r.textContent || r.getAttribute('label') || r.value || '').toLowerCase();
-      if (text.includes('asin')) {
-        const inner = r.querySelector('input[type="radio"]') ||
-                      r.shadowRoot?.querySelector('input[type="radio"]') || r;
-        inner.click();
-        baLog('  Selected ASIN view radio');
-        await sleep(3000);
-        return true;
-      }
-    }
-
-    // Strategy 4: URL-based — append or change viewType param
-    const url = new URL(window.location.href);
-    if (!url.searchParams.has('viewType') || url.searchParams.get('viewType') !== 'ASIN') {
-      url.searchParams.set('viewType', 'ASIN');
-      baLog('  Navigating to ASIN view via URL...');
-      window.location.href = url.toString();
-      return 'navigated';
-    }
-
-    baLog('  Could not find ASIN view toggle — may already be on ASIN view', 'warn');
-    return false;
+    // Strategy 3: URL-based — set viewType=ASIN and reload
+    currentUrl.searchParams.set('viewType', 'ASIN');
+    baLog('  Navigating to ASIN view via URL...');
+    window.location.href = currentUrl.toString();
+    return 'navigated';
   }
 
   // ============================================================
@@ -643,11 +641,63 @@
 
   /**
    * Programmatically select a specific ASIN in the picker.
+   *
+   * Tries DOM-based selection first (type into the ASIN picker input,
+   * click the matching dropdown option).  Falls back to URL navigation.
    */
   async function selectAsin(asin) {
-    // Strategy 1: Native <select>
+    // Strategy 1: kat-predictive-input — the ASIN picker on ASIN View
+    // Try all kat-predictive-input elements, not just specific IDs
+    const katInputs = document.querySelectorAll('kat-predictive-input');
+    for (const katEl of katInputs) {
+      if (!isVisible(katEl)) continue;
+      const innerInput = getShadowInput(katEl);
+      if (!innerInput) continue;
+
+      baLog(`  Typing "${asin}" into ASIN picker...`);
+      innerInput.focus();
+      innerInput.click();
+      await sleep(500);
+
+      // Clear existing value first
+      setNativeValue(innerInput, '');
+      await sleep(300);
+      setNativeValue(innerInput, asin);
+      await sleep(2000);
+
+      // Look for the matching dropdown option and click it
+      const options = [
+        ...querySelectorAllDeep('[role="option"]'),
+        ...document.querySelectorAll('[role="listbox"] [role="option"]')
+      ];
+      const seen = new Set();
+      let clicked = false;
+      for (const opt of options) {
+        if (seen.has(opt)) continue;
+        seen.add(opt);
+        if (opt.textContent.includes(asin) && isVisible(opt)) {
+          opt.click();
+          baLog(`  Selected "${asin}" from dropdown`);
+          await sleep(1000);
+          clicked = true;
+          break;
+        }
+      }
+
+      if (!clicked) {
+        // Try pressing Enter to confirm
+        innerInput.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true
+        }));
+        await sleep(1000);
+      }
+
+      return true;
+    }
+
+    // Strategy 2: Native <select>
     const nativeSelect = document.querySelector(
-      'select[data-testid*="asin"], select[name*="asin"], select[id*="asin"]'
+      'select[data-testid*="asin" i], select[name*="asin" i], select[id*="asin" i]'
     );
     if (nativeSelect) {
       nativeSelect.value = asin;
@@ -656,72 +706,11 @@
       return true;
     }
 
-    // Strategy 2: kat-predictive-input (Amazon's shadow DOM component)
-    const katPredictive = document.querySelector(
-      'kat-predictive-input#asin, kat-predictive-input[data-test-id="PredictiveTextFilter"]'
-    );
-    if (katPredictive) {
-      const innerInput = getShadowInput(katPredictive);
-      if (innerInput) {
-        innerInput.focus();
-        innerInput.click();
-        await sleep(300);
-        setNativeValue(innerInput, asin);
-        await sleep(1500);
-
-        // Click the matching option from the dropdown
-        const options = [
-          ...querySelectorAllDeep('[role="option"]'),
-          ...document.querySelectorAll('[role="listbox"] [role="option"]')
-        ];
-        const seen = new Set();
-        for (const opt of options) {
-          if (seen.has(opt)) continue;
-          seen.add(opt);
-          if (opt.textContent.includes(asin)) {
-            opt.click();
-            await sleep(1000);
-            return true;
-          }
-        }
-
-        // Try pressing Enter on the inner input
-        innerInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-        await sleep(1000);
-        return true;
-      }
-    }
-
-    // Strategy 3: Regular search input — type the ASIN and select it
-    const searchInput = findAsinSelector();
-    if (searchInput && searchInput.tagName === 'INPUT') {
-      searchInput.focus();
-      setNativeValue(searchInput, asin);
-      await sleep(1500);
-
-      // Click the matching option from the dropdown
-      const options = querySelectorAllDeep(
-        '[role="option"], [class*="option"], [class*="suggestion"], [class*="item"]'
-      );
-      for (const opt of options) {
-        if (opt.textContent.includes(asin) && isVisible(opt)) {
-          opt.click();
-          await sleep(1000);
-          return true;
-        }
-      }
-
-      // Try pressing Enter
-      searchInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-      await sleep(1000);
-      return true;
-    }
-
-    // Strategy 4: Use the URL — navigate to the ASIN view with the ASIN param
+    // Strategy 3: URL navigation as last resort
+    baLog(`  DOM selection failed — navigating via URL for ${asin}...`, 'warn');
     const url = new URL(window.location.href);
     url.searchParams.set('asin', asin);
     window.location.href = url.toString();
-    // This will reload the page — caller should handle this
     return 'navigated';
   }
 
@@ -989,8 +978,8 @@
         // Click "Apply" so the page refreshes with the new ASIN's data
         await clickApplyButton();
 
-        // Wait for data to finish loading after apply
-        await sleep(2000);
+        // Wait for report data to fully load after apply
+        await sleep(4000);
 
         // Trigger download
         const downloaded = await clickDownloadButton();
