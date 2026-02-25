@@ -229,13 +229,25 @@
   // ── Export Triggering (runs on /projects/<id>/ranks/<asin> page) ──────────
 
   async function triggerExport() {
-    console.log('[Datarova Bulk] triggerExport: looking for Export button...');
+    console.log('[Datarova Bulk] triggerExport: waiting for Export button...');
 
-    var exportBtn = findButtonByText('export');
+    // Wait up to 15s for the Export button to appear (page may still be loading)
+    var exportBtn = null;
+    var maxWait = 15000;
+    var interval = 500;
+    var elapsed = 0;
+    while (!exportBtn && elapsed < maxWait) {
+      exportBtn = findButtonByText('export');
+      if (!exportBtn) {
+        await sleep(interval);
+        elapsed += interval;
+      }
+    }
+
     if (!exportBtn) {
       // Log all buttons for debugging
       var allBtns = document.querySelectorAll('button, [role="button"], .MuiButton-root');
-      console.log('[Datarova Bulk] triggerExport: found', allBtns.length, 'buttons on page:');
+      console.log('[Datarova Bulk] triggerExport: found', allBtns.length, 'buttons after ' + maxWait + 'ms:');
       for (var b = 0; b < Math.min(allBtns.length, 20); b++) {
         console.log('[Datarova Bulk]   btn[' + b + ']:', (allBtns[b].textContent || '').trim().substring(0, 60),
           '| aria-label:', allBtns[b].getAttribute('aria-label'),
@@ -243,6 +255,8 @@
       }
       throw new Error('Export button not found on page');
     }
+
+    console.log('[Datarova Bulk] triggerExport: found Export button after ' + elapsed + 'ms');
 
     console.log('[Datarova Bulk] triggerExport: clicking Export button:', exportBtn.textContent.trim());
     exportBtn.click();
