@@ -1043,6 +1043,15 @@
       showProgress(i, asins.length);
 
       try {
+        // Re-ensure ASIN view before each iteration — Apply can reset the view
+        console.log(`[SellerData] [${i + 1}/${asins.length}] Re-checking ASIN view before selecting ${asin}...`);
+        const recheck = await ensureAsinView();
+        if (recheck === 'navigated') {
+          saveResumeState(asins, i);
+          baLog('Page navigating to ASIN view — will resume after reload...', 'info');
+          return;
+        }
+
         // Select the ASIN
         const selectResult = await selectAsin(asin);
 
@@ -1058,6 +1067,15 @@
 
         // Wait for report data to fully load after apply
         await sleep(4000);
+
+        // Re-ensure ASIN view after Apply (Apply can reset the view to Brand)
+        console.log(`[SellerData] [${i + 1}/${asins.length}] Re-checking ASIN view after Apply...`);
+        const postApply = await ensureAsinView();
+        if (postApply === 'navigated') {
+          saveResumeState(asins, i);
+          baLog('Page navigating to ASIN view — will resume after reload...', 'info');
+          return;
+        }
 
         // Trigger download
         const downloaded = await clickDownloadButton();
@@ -1159,6 +1177,13 @@
       showProgress(globalIdx, state.asins.length);
 
       try {
+        // Re-ensure ASIN view before each iteration — Apply can reset the view
+        const recheck = await ensureAsinView();
+        if (recheck === 'navigated') {
+          saveResumeState(state.asins, globalIdx);
+          return true;
+        }
+
         const selectResult = await selectAsin(asin);
         if (selectResult === 'navigated') {
           saveResumeState(state.asins, globalIdx);
@@ -1168,6 +1193,13 @@
         // Click "Apply" so the page refreshes with the new ASIN's data
         await clickApplyButton();
         await sleep(2000);
+
+        // Re-ensure ASIN view after Apply (Apply can reset the view to Brand)
+        const postApply = await ensureAsinView();
+        if (postApply === 'navigated') {
+          saveResumeState(state.asins, globalIdx);
+          return true;
+        }
 
         const dl = await clickDownloadButton();
         if (dl) {
