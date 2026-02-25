@@ -45,6 +45,31 @@
   }
 
   /**
+   * Poll for an element using a custom finder function.
+   * Unlike waitForElement which uses a CSS selector, this accepts any
+   * function that returns an element (or null).  Retries every `interval`
+   * ms until `timeout` ms have elapsed.
+   *
+   * Useful for elements behind shadow DOM or that need complex checks
+   * like visibility or text matching.
+   */
+  function pollForElement(finderFn, timeout = 20000, interval = 500) {
+    return new Promise((resolve, reject) => {
+      const el = finderFn();
+      if (el) return resolve(el);
+      const start = Date.now();
+      const timer = setInterval(() => {
+        const el = finderFn();
+        if (el) { clearInterval(timer); resolve(el); return; }
+        if (Date.now() - start >= timeout) {
+          clearInterval(timer);
+          reject(new Error('pollForElement timeout'));
+        }
+      }, interval);
+    });
+  }
+
+  /**
    * Set a value on a React-controlled input using native setter + events.
    */
   function setNativeValue(el, value) {
@@ -112,12 +137,16 @@
    * "Brand View" (default) and "ASIN View".  We need ASIN View so
    * the per-ASIN selector appears.
    *
-   * Tries multiple strategies to find and click the tab, then VERIFIES
-   * the view actually switched before returning true.
+   * @param {boolean} forceClick — When true, ALWAYS click the ASIN View
+   *   tab even if it appears to be already selected.  This is critical
+   *   because Apply can silently reset the view back to Brand without
+   *   updating the tab's "selected" attribute.
+   *
+   * Returns true on success, 'navigated' if the page is reloading via URL.
    */
-  async function ensureAsinView() {
+  async function ensureAsinView(forceClick = false) {
     baLog('Checking view mode...');
-    console.log('[SellerData] ensureAsinView() starting...');
+    console.log(`[SellerData] ensureAsinView(forceClick=${forceClick}) starting...`);
 
     // ---- Collect ALL possible tab candidates ----
     const candidates = [];
@@ -185,9 +214,9 @@
       baLog(`    ${c.type}: <${c.el.tagName.toLowerCase()}> active=${c.isActive}`);
     }
 
-    // ---- Check if already on ASIN view ----
-    if (candidates.length > 0 && candidates.some(c => c.isActive)) {
-      console.log('[SellerData] ASIN View tab appears already active');
+    // ---- Check if already on ASIN view (skip if forceClick) ----
+    if (!forceClick && candidates.length > 0 && candidates.some(c => c.isActive)) {
+      console.log('[SellerData] ASIN View tab appears already active (and forceClick=false)');
       baLog('Already on ASIN view (tab is active)');
       return true;
     }
@@ -195,16 +224,28 @@
     // ---- Click the best candidate ----
     if (candidates.length > 0) {
       const best = candidates[0];
-      baLog(`Switching to ASIN view — clicking ${best.type}...`);
-      console.log(`[SellerData] Clicking ${best.type}: <${best.el.tagName}>`);
+      baLog(`${forceClick ? 'Force-clicking' : 'Switching to'} ASIN view — clicking ${best.type}...`);
+      console.log(`[SellerData] Clicking ${best.type}: <${best.el.tagName}> (forceClick=${forceClick})`);
 
       // For kat-tab-header, click the inner button in shadow DOM
       const inner = best.el.shadowRoot?.querySelector('button, a, [role="tab"]') || best.el;
       inner.click();
-      console.log('[SellerData] Click dispatched, waiting 5s...');
-      await sleep(5000);
+      console.log('[SellerData] Click dispatched, waiting for ASIN view to load...');
 
-      // Check if the page is still here (the click might trigger navigation)
+      // Wait for the page content to update after tab switch.
+      // Poll for the ASIN selector to appear as proof the view loaded,
+      // with a maximum wait of 15s.
+      try {
+        await pollForElement(() => {
+          return findAsinSelector();
+        }, 15000, 500);
+        baLog('  ASIN view loaded (ASIN selector detected)');
+      } catch {
+        // Fallback: fixed wait if the selector can't be found
+        baLog('  ASIN selector not detected, waiting 5s as fallback...', 'warn');
+        await sleep(5000);
+      }
+
       console.log('[SellerData] Still on page after click');
       baLog('  Clicked tab, verifying view change...');
 
@@ -797,45 +838,47 @@
    * Download" would re-download the old report.
    */
   async function clickApplyButton() {
-    // Priority 1: Amazon's kat-button with label "Apply"
-    const katApply = querySelectorDeep('kat-button[label="Apply"]') ||
-                     querySelectorDeep('kat-button[label="apply"]');
-    if (katApply) {
-      const inner = katApply.shadowRoot?.querySelector('button') || katApply;
-      inner.click();
-      baLog('  Clicked Apply button (kat-button)');
-      await sleep(4000); // wait for data to refresh
-      return true;
+    // First, wait for the Apply button to be present (it may take a moment after tab switch)
+    baLog('  Looking for Apply button...');
+
+    let applyBtn;
+    try {
+      applyBtn = await pollForElement(() => {
+        // Priority 1: Amazon's kat-button with label "Apply"
+        const katApply = querySelectorDeep('kat-button[label="Apply"]') ||
+                         querySelectorDeep('kat-button[label="apply"]');
+        if (katApply) return katApply;
+
+        // Priority 2: Any visible button/kat-button whose text is "Apply"
+        const allClickables = querySelectorAllDeep(
+          'button, kat-button, [role="button"], input[type="submit"], input[type="button"]'
+        );
+        for (const el of allClickables) {
+          const text = (el.textContent || el.value || el.getAttribute('label') || '').trim();
+          if (/^apply$/i.test(text) && isVisible(el)) return el;
+        }
+
+        // Priority 3: Button whose data-test-id / data-testid contains "apply"
+        const testIdApply = querySelectorDeep('[data-test-id*="pply"]') ||
+                            querySelectorDeep('[data-testid*="pply"]');
+        if (testIdApply && isVisible(testIdApply)) return testIdApply;
+
+        return null;
+      }, 10000, 500);
+    } catch {
+      baLog('  No Apply button found — page may auto-apply on selection', 'warn');
+      await sleep(3000); // still wait for any auto-apply
+      return false;
     }
 
-    // Priority 2: Any visible button/kat-button whose text is "Apply"
-    const allClickables = querySelectorAllDeep(
-      'button, kat-button, [role="button"], input[type="submit"], input[type="button"]'
-    );
-    for (const el of allClickables) {
-      const text = (el.textContent || el.value || el.getAttribute('label') || '').trim();
-      if (/^apply$/i.test(text) && isVisible(el)) {
-        const inner = el.shadowRoot?.querySelector('button') || el;
-        inner.click();
-        baLog('  Clicked Apply button');
-        await sleep(4000);
-        return true;
-      }
-    }
+    const inner = applyBtn.shadowRoot?.querySelector('button') || applyBtn;
+    inner.click();
+    baLog('  Clicked Apply button — waiting for data to refresh...');
 
-    // Priority 3: Button whose data-test-id / data-testid contains "apply"
-    const testIdApply = querySelectorDeep('[data-test-id*="pply"]') ||
-                        querySelectorDeep('[data-testid*="pply"]');
-    if (testIdApply && isVisible(testIdApply)) {
-      const inner = testIdApply.shadowRoot?.querySelector('button') || testIdApply;
-      inner.click();
-      baLog('  Clicked Apply button (data-test-id)');
-      await sleep(4000);
-      return true;
-    }
-
-    baLog('  No Apply button found — page may auto-apply on selection', 'warn');
-    return false;
+    // Wait for page data to refresh.  Poll for staleness indicators to clear,
+    // or fall back to a generous fixed wait.
+    await sleep(6000);
+    return true;
   }
 
   // ============================================================
@@ -843,21 +886,15 @@
   // ============================================================
 
   /**
-   * Find and click the "Generate Download" / "Download" button.
+   * Locate the "Generate Download" / "Download" button on the page.
+   * Returns the element or null (does NOT click it).
    */
-  async function clickDownloadButton() {
+  function findDownloadButton() {
     // Priority 1: Direct lookup for Amazon's known GenerateDownloadButton (may be in shadow DOM)
     const knownBtn = querySelectorDeep('#GenerateDownloadButton') ||
                      querySelectorDeep('[data-test-id="GenerateDownloadButton"]') ||
                      querySelectorDeep('kat-button[label="Generate Download"]');
-    if (knownBtn) {
-      baLog('Found Generate Download button');
-      // For kat-button, click the inner <button> in its shadow root if available
-      const innerBtn = knownBtn.shadowRoot?.querySelector('button') || knownBtn;
-      innerBtn.click();
-      await sleep(1000);
-      return true;
-    }
+    if (knownBtn) return knownBtn;
 
     const downloadPhrases = [
       'generate download',
@@ -879,16 +916,36 @@
 
       for (const phrase of downloadPhrases) {
         if (text.includes(phrase) || testid.includes(phrase.replace(/\s/g, '-'))) {
-          // For kat-button, click inner <button> in shadow root
-          const innerBtn = el.shadowRoot?.querySelector('button') || el;
-          innerBtn.click();
-          await sleep(1000);
-          return true;
+          return el;
         }
       }
     }
 
-    return false;
+    return null;
+  }
+
+  /**
+   * Find and click the "Generate Download" / "Download" button.
+   * Waits up to 20 seconds for the button to appear on the page,
+   * polling every 500ms — the button can take a while to load after
+   * Apply refreshes the data.
+   */
+  async function clickDownloadButton() {
+    baLog('  Waiting for Generate Download button to load...');
+    let btn;
+    try {
+      btn = await pollForElement(findDownloadButton, 20000, 500);
+    } catch {
+      baLog('  Generate Download button did not appear after 20s', 'warn');
+      return false;
+    }
+
+    baLog('Found Generate Download button');
+    // For kat-button, click the inner <button> in its shadow root if available
+    const innerBtn = btn.shadowRoot?.querySelector('button') || btn;
+    innerBtn.click();
+    await sleep(1000);
+    return true;
   }
 
   /**
@@ -909,8 +966,28 @@
    * with document.querySelector — no need to traverse shadow DOM.
    */
   async function handleDownloadTypeDialog() {
-    // Wait for modal to render
-    await sleep(2000);
+    // ----- 0. Wait for the modal to actually appear -----
+    // The modal popup can take several seconds to render.
+    // Poll for it instead of using a fixed sleep.
+    baLog('  Waiting for download dialog to appear...');
+    let modal;
+    try {
+      modal = await pollForElement(() => {
+        // Check for kat-modal that is visible / has the download button
+        const m = document.querySelector('kat-modal');
+        if (m && isVisible(m)) return m;
+        // Also check for the modal's own generate button as proof it loaded
+        const mbtn = document.querySelector('#downloadModalGenerateDownloadButton');
+        if (mbtn) return mbtn.closest('kat-modal') || mbtn;
+        return null;
+      }, 15000, 500);
+    } catch {
+      baLog('  Download dialog did not appear (may not be needed for this page)', 'warn');
+      return false;
+    }
+    // Extra settle time for the modal content to fully render
+    await sleep(1000);
+    baLog('  Download dialog appeared');
 
     // ----- 1. Select "Simple View" radio -----
     // Radio buttons are light-DOM children of kat-modal, so
@@ -936,54 +1013,44 @@
     }
 
     // ----- 2. Click the modal's "Generate Download" button -----
-    // The button has a unique ID — find it directly in the document.
-    // It is NOT the outer trigger (#GenerateDownloadButton) — it's
-    // #downloadModalGenerateDownloadButton inside the kat-modal.
-    const modalBtn = document.querySelector('#downloadModalGenerateDownloadButton');
-    if (modalBtn) {
-      const inner = modalBtn.shadowRoot?.querySelector('button') || modalBtn;
-      inner.click();
-      baLog('  Clicked "Generate Download" in modal (by ID)');
-      await sleep(2000);
-      return true;
-    }
-
-    // Fallback: find any kat-button with label "Generate Download"
-    // that is NOT the outer trigger button
-    const katBtns = document.querySelectorAll('kat-button[label]');
-    for (const kb of katBtns) {
-      if (kb.id === 'GenerateDownloadButton') continue; // skip outer trigger
-      const lbl = (kb.getAttribute('label') || '').toLowerCase();
-      if (lbl.includes('generate download') || lbl.includes('generate report')) {
-        const inner = kb.shadowRoot?.querySelector('button') || kb;
-        inner.click();
-        baLog('  Clicked "Generate Download" in modal (kat-button label)');
-        await sleep(2000);
-        return true;
-      }
-    }
-
-    // Last fallback: look inside [slot="footer"] of kat-modal
-    const modal = document.querySelector('kat-modal');
-    if (modal) {
-      const footer = modal.querySelector('[slot="footer"]');
-      if (footer) {
-        const btns = footer.querySelectorAll('button, kat-button, [role="button"]');
-        for (const btn of btns) {
-          const text = (btn.textContent || btn.getAttribute('label') || '').toLowerCase().trim();
-          if (text.includes('generate') || text.includes('download')) {
-            const inner = btn.shadowRoot?.querySelector('button') || btn;
-            inner.click();
-            baLog('  Clicked confirm button in modal footer');
-            await sleep(2000);
-            return true;
+    // Wait for the button to be available (it may render after radio selection)
+    let modalConfirmBtn;
+    try {
+      modalConfirmBtn = await pollForElement(() => {
+        // By ID first
+        const byId = document.querySelector('#downloadModalGenerateDownloadButton');
+        if (byId) return byId;
+        // Fallback: kat-button with label "Generate Download" that isn't the outer trigger
+        const katBtns = document.querySelectorAll('kat-button[label]');
+        for (const kb of katBtns) {
+          if (kb.id === 'GenerateDownloadButton') continue;
+          const lbl = (kb.getAttribute('label') || '').toLowerCase();
+          if (lbl.includes('generate download') || lbl.includes('generate report')) return kb;
+        }
+        // Last fallback: inside [slot="footer"] of kat-modal
+        const m = document.querySelector('kat-modal');
+        if (m) {
+          const footer = m.querySelector('[slot="footer"]');
+          if (footer) {
+            const btns = footer.querySelectorAll('button, kat-button, [role="button"]');
+            for (const btn of btns) {
+              const text = (btn.textContent || btn.getAttribute('label') || '').toLowerCase().trim();
+              if (text.includes('generate') || text.includes('download')) return btn;
+            }
           }
         }
-      }
+        return null;
+      }, 10000, 500);
+    } catch {
+      baLog('  Could not find confirmation button in download dialog', 'warn');
+      return false;
     }
 
-    baLog('  Could not find confirmation button in download dialog', 'warn');
-    return false;
+    const inner = modalConfirmBtn.shadowRoot?.querySelector('button') || modalConfirmBtn;
+    inner.click();
+    baLog('  Clicked "Generate Download" in modal');
+    await sleep(2000);
+    return true;
   }
 
   // ============================================================
@@ -1001,11 +1068,20 @@
     updateButtonState('running');
     baLog('Starting bulk download for all ASINs...');
 
-    // Step 0: Make sure we're on ASIN view (not Brand view)
-    const viewResult = await ensureAsinView();
+    // ================================================================
+    // Phase 1: COLLECT ALL ASINs UPFRONT
+    // ================================================================
+    // Switch to ASIN view, discover all ASINs, and store the full list
+    // before beginning the download loop.  This way we don't lose the
+    // list if the view resets during iteration.
+    // ================================================================
+
+    baLog('Phase 1: Collecting all ASINs...');
+
+    const viewResult = await ensureAsinView(false);
     if (viewResult === 'navigated') {
       baLog('Page navigating to ASIN view — will resume after reload...', 'info');
-      return; // Page is reloading
+      return;
     }
     if (viewResult === false) {
       baLog('Cannot proceed — failed to switch to ASIN view. Please manually click the "ASIN View" tab and try again.', 'error');
@@ -1014,7 +1090,6 @@
       return;
     }
 
-    // Step 1: Discover all ASINs
     const asins = await discoverAllAsins();
 
     if (asins.length === 0) {
@@ -1024,13 +1099,27 @@
       return;
     }
 
-    baLog(`Found ${asins.length} ASINs to download`);
+    baLog(`Found ${asins.length} ASINs to download: ${asins.map(a => a.asin).join(', ')}`);
     showProgress(0, asins.length);
+
+    // ================================================================
+    // Phase 2: DOWNLOAD EACH ASIN ONE-BY-ONE
+    // ================================================================
+    // For each ASIN:
+    //   1. Force-click ASIN View tab (always, don't trust active state)
+    //   2. Wait for the ASIN selector to appear
+    //   3. Type the ASIN and select it
+    //   4. Click Apply and wait for data to load
+    //   5. Force-click ASIN View tab AGAIN (Apply can reset to Brand)
+    //   6. Wait for Generate Download button to appear (polling)
+    //   7. Click download and handle the modal dialog
+    // ================================================================
+
+    baLog('Phase 2: Downloading reports...');
 
     let successCount = 0;
     let errorCount = 0;
 
-    // Step 2: Iterate through each ASIN
     for (let i = 0; i < asins.length; i++) {
       if (shouldStop) {
         baLog('Stopped by user.', 'warn');
@@ -1039,48 +1128,44 @@
 
       const { asin, label } = asins[i];
       const shortLabel = label.length > 50 ? label.substring(0, 50) + '...' : label;
-      baLog(`[${i + 1}/${asins.length}] Selecting ASIN: ${asin} — ${shortLabel}`);
+      baLog(`[${i + 1}/${asins.length}] Processing ASIN: ${asin} — ${shortLabel}`);
       showProgress(i, asins.length);
 
       try {
-        // Re-ensure ASIN view before each iteration — Apply can reset the view
-        console.log(`[SellerData] [${i + 1}/${asins.length}] Re-checking ASIN view before selecting ${asin}...`);
-        const recheck = await ensureAsinView();
-        if (recheck === 'navigated') {
+        // Step 1: Force-click ASIN View tab before selecting ASIN
+        console.log(`[SellerData] [${i + 1}/${asins.length}] Force-clicking ASIN view before selecting ${asin}...`);
+        const preClick = await ensureAsinView(true); // forceClick=true
+        if (preClick === 'navigated') {
           saveResumeState(asins, i);
           baLog('Page navigating to ASIN view — will resume after reload...', 'info');
           return;
         }
 
-        // Select the ASIN
+        // Step 2: Select the ASIN
         const selectResult = await selectAsin(asin);
-
         if (selectResult === 'navigated') {
-          // Page will reload with the new ASIN — save progress and resume
           saveResumeState(asins, i);
           baLog('Page navigating to new ASIN — will resume after reload...', 'info');
-          return; // Page is reloading
+          return;
         }
 
-        // Click "Apply" so the page refreshes with the new ASIN's data
+        // Step 3: Click Apply and wait for data to load
         await clickApplyButton();
 
-        // Wait for report data to fully load after apply
-        await sleep(4000);
-
-        // Re-ensure ASIN view after Apply (Apply can reset the view to Brand)
-        console.log(`[SellerData] [${i + 1}/${asins.length}] Re-checking ASIN view after Apply...`);
-        const postApply = await ensureAsinView();
+        // Step 4: Force-click ASIN View tab AGAIN after Apply
+        // (Apply is known to reset the view back to Brand View)
+        console.log(`[SellerData] [${i + 1}/${asins.length}] Force-clicking ASIN view AFTER Apply for ${asin}...`);
+        const postApply = await ensureAsinView(true); // forceClick=true
         if (postApply === 'navigated') {
           saveResumeState(asins, i);
           baLog('Page navigating to ASIN view — will resume after reload...', 'info');
           return;
         }
 
-        // Trigger download
+        // Step 5: Trigger download (polls up to 20s for button to appear)
         const downloaded = await clickDownloadButton();
         if (downloaded) {
-          // Handle download type dialog if it appears
+          // Handle download type dialog (polls for modal to appear)
           await handleDownloadTypeDialog();
           baLog(`  Downloaded report for ${asin}`, 'ok');
           successCount++;
@@ -1089,9 +1174,9 @@
           errorCount++;
         }
 
-        // Wait between downloads to not overwhelm Amazon
+        // Pause between downloads to not overwhelm Amazon
         if (i < asins.length - 1) {
-          await sleep(2000);
+          await sleep(3000);
         }
       } catch (err) {
         baLog(`  Error processing ${asin}: ${err.message}`, 'error');
@@ -1173,12 +1258,12 @@
 
       const globalIdx = state.currentIndex + 1 + i;
       const { asin, label } = remainingAsins[i];
-      baLog(`[${globalIdx + 1}/${state.asins.length}] Selecting ASIN: ${asin}`);
+      baLog(`[${globalIdx + 1}/${state.asins.length}] Processing ASIN: ${asin}`);
       showProgress(globalIdx, state.asins.length);
 
       try {
-        // Re-ensure ASIN view before each iteration — Apply can reset the view
-        const recheck = await ensureAsinView();
+        // Force-click ASIN view before each iteration
+        const recheck = await ensureAsinView(true);
         if (recheck === 'navigated') {
           saveResumeState(state.asins, globalIdx);
           return true;
@@ -1190,12 +1275,10 @@
           return true;
         }
 
-        // Click "Apply" so the page refreshes with the new ASIN's data
         await clickApplyButton();
-        await sleep(2000);
 
-        // Re-ensure ASIN view after Apply (Apply can reset the view to Brand)
-        const postApply = await ensureAsinView();
+        // Force-click ASIN view AGAIN after Apply
+        const postApply = await ensureAsinView(true);
         if (postApply === 'navigated') {
           saveResumeState(state.asins, globalIdx);
           return true;
@@ -1211,7 +1294,7 @@
           errorCount++;
         }
 
-        if (i < remainingAsins.length - 1) await sleep(2000);
+        if (i < remainingAsins.length - 1) await sleep(3000);
       } catch (err) {
         baLog(`  Error: ${err.message}`, 'error');
         errorCount++;
