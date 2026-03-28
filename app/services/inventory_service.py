@@ -4,8 +4,9 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models.inventory import AgedInventory, FBAInventory, RestockRecommendation, StrandedInventory
+from app.db.models.inventory import AWDInventory, AgedInventory, FBAInventory, RestockRecommendation, StrandedInventory
 from app.schemas.inventory import (
+    AWDInventoryCreate,
     AgedInventoryCreate,
     FBAInventoryCreate,
     RestockRecommendationCreate,
@@ -47,6 +48,44 @@ async def list_fba_inventory(
     if end_date:
         stmt = stmt.where(FBAInventory.snapshot_date <= end_date)
     stmt = stmt.order_by(FBAInventory.snapshot_date.desc()).offset(offset).limit(limit)
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def upsert_awd_inventory(
+    db: AsyncSession, product_id: uuid.UUID, data: AWDInventoryCreate
+) -> AWDInventory:
+    stmt = select(AWDInventory).where(
+        AWDInventory.product_id == product_id,
+        AWDInventory.snapshot_date == data.snapshot_date,
+    )
+    result = await db.execute(stmt)
+    existing = result.scalar_one_or_none()
+    if existing:
+        for field, value in data.model_dump(exclude_unset=True).items():
+            setattr(existing, field, value)
+        await db.flush()
+        return existing
+    record = AWDInventory(product_id=product_id, **data.model_dump())
+    db.add(record)
+    await db.flush()
+    return record
+
+
+async def list_awd_inventory(
+    db: AsyncSession,
+    product_id: uuid.UUID,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    offset: int = 0,
+    limit: int = 50,
+) -> list[AWDInventory]:
+    stmt = select(AWDInventory).where(AWDInventory.product_id == product_id)
+    if start_date:
+        stmt = stmt.where(AWDInventory.snapshot_date >= start_date)
+    if end_date:
+        stmt = stmt.where(AWDInventory.snapshot_date <= end_date)
+    stmt = stmt.order_by(AWDInventory.snapshot_date.desc()).offset(offset).limit(limit)
     result = await db.execute(stmt)
     return list(result.scalars().all())
 

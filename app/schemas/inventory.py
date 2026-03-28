@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -85,6 +86,56 @@ class AgedInventoryRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AWDInventoryCreate(BaseModel):
+    snapshot_date: date
+    seller_sku: str | None = None
+    fnsku: str | None = None
+    asin: str | None = None
+    total_onhand_quantity: int = 0
+    total_inbound_quantity: int = 0
+    total_transferring_quantity: int = 0
+    quantity_available: int = 0
+    quantity_reserved: int = 0
+    quantity_inbound_working: int = 0
+    quantity_inbound_shipped: int = 0
+    quantity_inbound_receiving: int = 0
+
+
+class AWDInventoryRead(BaseModel):
+    id: UUID
+    product_id: UUID
+    snapshot_date: date
+    seller_sku: str | None = None
+    fnsku: str | None = None
+    asin: str | None = None
+    total_onhand_quantity: int
+    total_inbound_quantity: int
+    total_transferring_quantity: int
+    quantity_available: int
+    quantity_reserved: int
+    quantity_inbound_working: int
+    quantity_inbound_shipped: int
+    quantity_inbound_receiving: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AWDSyncPayload(BaseModel):
+    """Raw payload from external sync service for debug logging."""
+    raw_items: list[dict[str, Any]]
+
+
+class AWDSyncDebugResponse(BaseModel):
+    """Response from the debug sync endpoint showing raw and mapped data."""
+    raw_sample: list[dict[str, Any]]
+    mapped_sample: list[dict[str, Any]]
+    total_items: int
+    items_with_nonzero_quantity: int
+    field_keys_found: list[str]
+    message: str
 
 
 class RestockRecommendationCreate(BaseModel):
