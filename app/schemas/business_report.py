@@ -21,6 +21,18 @@ class BusinessReportCreate(BaseModel):
     total_order_items: int = 0
 
 
+class SellerBusinessReportCreate(BusinessReportCreate):
+    """Create payload for the seller-scoped endpoint used by the dashboard.
+
+    Unlike the product-scoped bulk endpoint (which takes ``product_id`` from the
+    URL path), the dashboard sends ``product_id`` in the body. ``marketplace_id``
+    is accepted for convenience but is derivable from the product and not stored.
+    """
+
+    product_id: UUID
+    marketplace_id: UUID | None = None
+
+
 class BusinessReportRead(BaseModel):
     id: UUID
     product_id: UUID
@@ -41,3 +53,12 @@ class BusinessReportRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class SellerBusinessReportRead(BusinessReportRead):
+    """Read model for the seller-scoped list endpoint.
+
+    Includes the product ``asin`` so the dashboard table can display it.
+    """
+
+    asin: str | None = None
