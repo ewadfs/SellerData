@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Uuid, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -16,6 +16,8 @@ class AdCampaign(TimestampMixin, Base):
     campaign_name: Mapped[str] = mapped_column(String(500), nullable=False)
     campaign_type: Mapped[str] = mapped_column(String(20), nullable=False)
     targeting_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    portfolio_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_ranking: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     state: Mapped[str] = mapped_column(String(20), nullable=False)
     daily_budget: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
@@ -81,6 +83,7 @@ class AdMetricsDaily(Base):
     ad_group_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     product_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     keyword_target_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    product_target_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     report_date: Mapped[date] = mapped_column(Date, nullable=False)
     impressions: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     clicks: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -94,5 +97,36 @@ class AdMetricsDaily(Base):
     units_7d: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     units_14d: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     acos_7d: Mapped[float | None] = mapped_column(Numeric(8, 4), nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class AdSearchTermMetricsDaily(Base):
+    """Daily performance per customer search term (from SP/SB search term reports)."""
+
+    __tablename__ = "ad_search_term_metrics_daily"
+    __table_args__ = (
+        Index("ix_ad_search_term_metrics_campaign_date", "campaign_id", "report_date"),
+        Index("ix_ad_search_term_metrics_date", "report_date"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("ad_campaigns.id"), nullable=False)
+    ad_group_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("ad_groups.id"), nullable=True)
+    keyword_target_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("ad_keyword_targets.id"), nullable=True
+    )
+    product_target_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("ad_product_targets.id"), nullable=True
+    )
+    target_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    search_term: Mapped[str] = mapped_column(String(500), nullable=False)
+    match_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    report_date: Mapped[date] = mapped_column(Date, nullable=False)
+    impressions: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    clicks: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    spend: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
+    sales: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
+    orders: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

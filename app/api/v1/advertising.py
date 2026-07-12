@@ -5,7 +5,15 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db
-from app.schemas.advertising import AdCampaignCreate, AdCampaignRead, AdMetricsDailyCreate, AdMetricsDailyRead, AdvertisingSummary
+from app.schemas.advertising import (
+    AdCampaignCreate,
+    AdCampaignRead,
+    AdMetricsDailyCreate,
+    AdMetricsDailyRead,
+    AdSearchTermMetricsCreate,
+    AdSearchTermMetricsRead,
+    AdvertisingSummary,
+)
 from app.services import advertising_service
 
 router = APIRouter()
@@ -39,6 +47,18 @@ async def bulk_create_ad_metrics(
     seller_id: UUID, metrics: list[AdMetricsDailyCreate], db: AsyncSession = Depends(get_db)
 ):
     return await advertising_service.create_ad_metrics(db, metrics)
+
+
+@router.post(
+    "/sellers/{seller_id}/search-term-metrics/bulk",
+    response_model=list[AdSearchTermMetricsRead],
+    status_code=201,
+    tags=["Advertising"],
+)
+async def bulk_create_search_term_metrics(
+    seller_id: UUID, metrics: list[AdSearchTermMetricsCreate], db: AsyncSession = Depends(get_db)
+):
+    return await advertising_service.create_search_term_metrics(db, metrics)
 
 
 @router.get("/sellers/{seller_id}/advertising/summary", response_model=AdvertisingSummary, tags=["Advertising"])

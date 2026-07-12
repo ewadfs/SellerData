@@ -1,6 +1,13 @@
 from app.db.models.ab_testing import ABTest, ABTestMetricSnapshot, ABTestResult
 from app.db.models.account_health import AccountHealthMetric
-from app.db.models.advertising import AdCampaign, AdGroup, AdKeywordTarget, AdMetricsDaily, AdProductTarget
+from app.db.models.advertising import (
+    AdCampaign,
+    AdGroup,
+    AdKeywordTarget,
+    AdMetricsDaily,
+    AdProductTarget,
+    AdSearchTermMetricsDaily,
+)
 from app.db.models.brand_analytics import DemographicsReport, MarketBasketReport, RepeatPurchaseReport, SearchTermReport
 from app.db.models.business_report import BusinessReportDaily
 from app.db.models.inventory import AgedInventory, FBAInventory, RestockRecommendation, StrandedInventory
@@ -32,6 +39,7 @@ __all__ = [
     "AdKeywordTarget",
     "AdProductTarget",
     "AdMetricsDaily",
+    "AdSearchTermMetricsDaily",
     "KeywordRanking",
     "SearchVisibilityScore",
     "AccountHealthMetric",

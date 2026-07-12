@@ -4,8 +4,13 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models.advertising import AdCampaign, AdMetricsDaily
-from app.schemas.advertising import AdCampaignCreate, AdMetricsDailyCreate, AdvertisingSummary
+from app.db.models.advertising import AdCampaign, AdMetricsDaily, AdSearchTermMetricsDaily
+from app.schemas.advertising import (
+    AdCampaignCreate,
+    AdMetricsDailyCreate,
+    AdSearchTermMetricsCreate,
+    AdvertisingSummary,
+)
 
 
 async def list_campaigns(
@@ -40,6 +45,18 @@ async def create_ad_metrics(db: AsyncSession, metrics: list[AdMetricsDailyCreate
     results = []
     for data in metrics:
         record = AdMetricsDaily(**data.model_dump())
+        db.add(record)
+        results.append(record)
+    await db.flush()
+    return results
+
+
+async def create_search_term_metrics(
+    db: AsyncSession, metrics: list[AdSearchTermMetricsCreate]
+) -> list[AdSearchTermMetricsDaily]:
+    results = []
+    for data in metrics:
+        record = AdSearchTermMetricsDaily(**data.model_dump())
         db.add(record)
         results.append(record)
     await db.flush()
