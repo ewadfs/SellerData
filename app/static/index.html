@@ -347,6 +347,9 @@
     <a href="#" data-section="advertising">Advertising</a>
     <a href="#" data-section="keywords">Keywords</a>
 
+    <div class="nav-section">GNO</div>
+    <a href="#" data-section="gno-bleeders">Bleeders</a>
+
     <div class="nav-section">Testing</div>
     <a href="#" data-section="ab-tests">A/B Tests</a>
   </nav>
@@ -435,6 +438,45 @@
       <div class="page-header"><h2>Keyword Rankings</h2></div>
       <div class="card">
         <div id="keywords-table"><p class="loading">Loading...</p></div>
+      </div>
+    </div>
+
+    <!-- GNO: BLEEDERS -->
+    <div id="sec-gno-bleeders" class="section">
+      <div class="page-header">
+        <h2>GNO — Bleeders Report</h2>
+        <button class="btn" onclick="downloadBleedersCsv()">Download CSV</button>
+      </div>
+      <div class="card">
+        <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end;">
+          <div class="form-group">
+            <label>Seller</label>
+            <select id="bleeders-seller"></select>
+          </div>
+          <div class="form-group">
+            <label>Marketplace</label>
+            <select id="bleeders-marketplace"><option value="">All marketplaces</option></select>
+          </div>
+          <div class="form-group">
+            <label>Report Date</label>
+            <input type="date" id="bleeders-date">
+          </div>
+          <div class="form-group">
+            <label>Target ACOS %</label>
+            <input type="number" id="bleeders-target-acos" step="0.5" value="30" style="width: 110px;">
+          </div>
+          <div class="form-group">
+            <button class="btn btn-primary" onclick="generateBleedersReport()">Generate Report</button>
+          </div>
+        </div>
+        <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">
+          B1: targets/search terms with 10+ clicks and zero sales in the last 60 days.
+          B2: 1&ndash;4 orders in the last 30 days with ACOS above target +20pts (SP) / +10pts (SB/SD).
+          Campaigns over 100% ACOS are flagged for pause (ranking campaigns exempt).
+        </p>
+      </div>
+      <div id="bleeders-results">
+        <div class="card"><div class="empty-state"><p>Pick a seller and date, then generate the report.</p></div></div>
       </div>
     </div>
 
@@ -783,6 +825,7 @@ function loadSection(section) {
     'inventory': loadInventory,
     'advertising': loadCampaigns,
     'keywords': loadKeywords,
+    'gno-bleeders': loadGnoBleeders,
     'ab-tests': loadABTests,
   };
   if (loaders[section]) loaders[section]();
@@ -1166,6 +1209,107 @@ async function loadKeywords() {
       <td>${fmtDate(k.check_date)}</td>
     </tr>`).join('')}</tbody></table>`;
   } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── GNO: Bleeders ──
+async function loadGnoBleeders() {
+  try {
+    [sellers, marketplaces] = await Promise.all([
+      api('GET', '/sellers'),
+      api('GET', '/marketplaces'),
+    ]);
+    const sellerSel = document.getElementById('bleeders-seller');
+    const prevSeller = sellerSel.value;
+    sellerSel.innerHTML = sellers.map(s => `<option value="${s.id}">${s.seller_name}</option>`).join('');
+    if (prevSeller) sellerSel.value = prevSeller;
+
+    const mktSel = document.getElementById('bleeders-marketplace');
+    const prevMkt = mktSel.value;
+    mktSel.innerHTML = '<option value="">All marketplaces</option>' +
+      marketplaces.map(m => `<option value="${m.id}">${m.code} — ${m.name}</option>`).join('');
+    if (prevMkt) mktSel.value = prevMkt;
+
+    const dateEl = document.getElementById('bleeders-date');
+    if (!dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function bleedersParams() {
+  const sellerId = document.getElementById('bleeders-seller').value;
+  if (!sellerId) { toast('Create a seller account first', 'error'); return null; }
+  const params = new URLSearchParams();
+  const date = document.getElementById('bleeders-date').value;
+  if (date) params.set('report_date', date);
+  const targetAcos = document.getElementById('bleeders-target-acos').value;
+  if (targetAcos) params.set('target_acos', targetAcos);
+  const mkt = document.getElementById('bleeders-marketplace').value;
+  if (mkt) params.set('marketplace_id', mkt);
+  return { sellerId, params };
+}
+
+async function generateBleedersReport() {
+  const ctx = bleedersParams();
+  if (!ctx) return;
+  const el = document.getElementById('bleeders-results');
+  el.innerHTML = '<div class="card"><p class="loading">Generating report...</p></div>';
+  try {
+    const bundle = await api('GET', `/sellers/${ctx.sellerId}/bleeders/report?${ctx.params}`);
+    if (bundle.reports.length === 0) {
+      el.innerHTML = '<div class="card"><div class="empty-state"><p>No active marketplaces linked to this seller.</p></div></div>';
+      return;
+    }
+    el.innerHTML = bundle.reports.map(renderBleedersMarketplace).join('');
+  } catch (e) {
+    el.innerHTML = '<div class="card"><div class="empty-state"><p>Failed to generate report.</p></div></div>';
+    toast(e.message, 'error');
+  }
+}
+
+function renderBleedersMarketplace(r) {
+  const s = r.summary;
+  const flaggedSpend = (s.flagged_target_spend + s.flagged_campaign_spend).toFixed(2);
+  const stats = `<div class="stat-grid">
+    <div class="stat-card"><div class="label">B1 Zero-Conversion</div><div class="value">${s.b1_targets + s.b1_search_terms}</div><div class="sub">${s.b1_targets} targets · ${s.b1_search_terms} search terms</div></div>
+    <div class="stat-card"><div class="label">B2 High ACOS</div><div class="value">${s.b2_targets + s.b2_search_terms}</div><div class="sub">${s.b2_targets} targets · ${s.b2_search_terms} search terms</div></div>
+    <div class="stat-card"><div class="label">Campaigns &gt; 100% ACOS</div><div class="value">${s.campaigns_over_threshold}</div><div class="sub">Ranking campaigns exempt</div></div>
+    <div class="stat-card"><div class="label">Flagged Spend</div><div class="value">${fmtMoney(flaggedSpend, r.currency === 'USD' ? '$' : r.currency + ' ')}</div><div class="sub">Targets + campaigns, ${r.b2_window_start} → ${r.report_date}</div></div>
+  </div>`;
+
+  let body;
+  if (r.rows.length === 0) {
+    body = '<div class="empty-state"><p>No bleeders found — nothing to cut this week.</p></div>';
+  } else {
+    body = `<div style="overflow-x: auto;"><table><thead><tr>
+      <th>Type</th><th>Campaign</th><th>Target / Keyword</th><th>Search Term</th><th>Level</th>
+      <th>Clicks</th><th>Spend</th><th>Sales</th><th>Orders</th><th>ACoS</th><th>Reason</th><th>Action</th><th>Source</th>
+    </tr></thead><tbody>${r.rows.map(row => `<tr>
+      <td>${row.campaign_type}</td>
+      <td title="${row.campaign}">${row.campaign.length > 40 ? row.campaign.slice(0, 40) + '…' : row.campaign}</td>
+      <td>${row.target || '-'}</td>
+      <td>${row.search_term ? (row.amazon_search_url ? `<a href="${row.amazon_search_url}" target="_blank">${row.search_term}</a>` : row.search_term) : '-'}</td>
+      <td>${row.level}</td>
+      <td>${row.clicks}</td>
+      <td>${fmtMoney(row.spend, '')}</td>
+      <td>${fmtMoney(row.sales, '')}</td>
+      <td>${row.orders}</td>
+      <td>${row.acos != null ? row.acos.toFixed(1) + '%' : '-'}</td>
+      <td title="${row.reason}"><span class="badge ${row.source === 'B1' ? 'badge-danger' : 'badge-warning'}">${row.reason_category}</span></td>
+      <td>${row.recommended_action}</td>
+      <td>${row.source}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+  }
+
+  return `<div class="card">
+    <h3>${r.marketplace_code} — ${r.marketplace_name} <span style="font-weight: 400; color: var(--text-muted); font-size: 13px;">(${s.total_rows} rows · ${r.currency})</span></h3>
+    ${stats}
+    ${body}
+  </div>`;
+}
+
+function downloadBleedersCsv() {
+  const ctx = bleedersParams();
+  if (!ctx) return;
+  window.open(`${API}/sellers/${ctx.sellerId}/bleeders/report.csv?${ctx.params}`, '_blank');
 }
 
 // ── A/B Tests ──
